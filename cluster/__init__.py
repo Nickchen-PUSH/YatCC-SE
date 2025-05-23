@@ -4,29 +4,38 @@ from abc import ABC, abstractmethod
 from enum import IntEnum
 
 from pydantic import BaseModel, Field
+
+
 class ImageInfo(BaseModel):
     """镜像信息模型"""
+
     id: str = Field(..., description="镜像ID")
     name: str = Field(..., description="镜像名称")
     description: str = Field(..., description="镜像描述")
     full_name: str = Field(..., description="镜像全名")
 
+
 class JobParams(BaseModel):
     """作业参数模型"""
+
     name: str = Field(..., description="作业名称")
     image: str = Field(..., description="镜像名称")
     ports: list[int] = Field(..., description="端口映射")
     env: dict[str, str] = Field(..., description="环境变量")
 
+
 class JobInfo(BaseModel):
     """作业信息模型"""
+
     id: str = Field(..., description="作业ID")
     name: str = Field(..., description="作业名称")
     image: str = Field(..., description="镜像名称")
     ports: list[int] = Field(..., description="端口映射")
     env: dict[str, str] = Field(..., description="环境变量")
+
     class Status(IntEnum):
         """作业状态枚举类"""
+
         PENDING = 0
         RUNNING = 1
         SUCCESS = 2
@@ -38,6 +47,7 @@ class ClusterABC(ABC):
 
     class JobStatus(IntEnum):
         """作业状态枚举类"""
+
         PENDING = 0
         RUNNING = 1
         SUCCESS = 2
@@ -72,4 +82,15 @@ class ClusterABC(ABC):
     def list_images(self) -> list[ImageInfo]:
         """列出所有镜像"""
         pass
-    
+
+
+def create(type: str = "kubernetes", mock: bool = True) -> ClusterABC:
+    """创建集群实例"""
+    if mock:
+        from .mock import MockCluster
+
+        return MockCluster()
+    else:
+        from .kuber import KuberCluster
+
+        return KuberCluster()
