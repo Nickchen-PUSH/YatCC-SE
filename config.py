@@ -6,6 +6,22 @@ from base import PROJECT_DIR, Configuration, timetag
 
 # ==================================================================================== #
 
+class Environ(Configuration):
+    mock_cluster = True
+
+    EXECUTABLE: type["Executable"]
+    """外部可执行程序"""
+
+ENVIRON = Environ
+
+class Executable(Configuration):
+    redis_server = "/opt/homebrew/bin/redis-server"
+
+
+ENVIRON.EXECUTABLE = Executable
+
+# ==================================================================================== #
+
 
 class Config(Configuration):
     app_dir = str(PROJECT_DIR) + "/"
@@ -39,3 +55,4 @@ class Core(Configuration):
     """学生数据的归档目录，必须以 / 结尾"""
 
 CONFIG.CORE = Core
+
