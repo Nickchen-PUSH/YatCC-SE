@@ -60,8 +60,7 @@ async def ainit_redis_server():
 
     conf = f"""
 bind 127.0.0.1 -::1
-port 0
-unixsocket {REDIS_SOCK}
+port 6379
 unixsocketperm 777
 timeout 0
 daemonize no
@@ -97,7 +96,7 @@ appendonly no
 
     import redis.asyncio
 
-    db = redis.asyncio.Redis(**REDIS_INIT)
+    db = redis.asyncio.Redis()
     for _ in range(50):
         await aio.sleep(0.1)
         try:
@@ -126,10 +125,10 @@ async def ainit_core() -> None:
 
     from core import ainit, ready
 
-    from .. import ENVIRON
+    from config import ENVIRON
 
     await ainit_redis_server()
-    await ainit(cluster_mock=not ENVIRON.test_external)
+    await ainit(cluster_mock=ENVIRON.mock_cluster)
     for _ in range(50):
         await aio.sleep(0.1)
         if await ready():

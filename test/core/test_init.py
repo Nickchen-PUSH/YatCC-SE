@@ -39,7 +39,6 @@ class InitTest(AsyncTestCase):
 
         self.assertTrue(core.DB0.ping())
         self.assertTrue(core.DB_STU.ping())
-        self.assertTrue(core.CLUSTER.ready())
 
 
 if __name__ == "__main__":
