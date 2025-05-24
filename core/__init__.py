@@ -34,9 +34,9 @@ async def ainit(
     *,
     cluster_mock=False,
 ) -> None:
-    global DB0, DB_STU
+    global DB0, DB_STU, CLUSTER
 
-    from .. import CONFIG
+    from config import CONFIG
 
     DB0 = redis.asyncio.Redis(**CONFIG.CORE.redis_init, db=0)
     DB_STU = redis.asyncio.Redis(**CONFIG.CORE.redis_init, db=1)
