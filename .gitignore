@@ -1,0 +1,12 @@
+# Redis
+dump.rdb
+
+# Python
+__pycache__/
+venv*/
+
+# Test
+testing/
+
+# vscode
+.vscode/
