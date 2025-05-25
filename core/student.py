@@ -163,7 +163,7 @@ class TABLE:
     @classmethod
     async def check_password(cls, sid: str, password: str) -> bool:
         """检查学生密码"""
-        return False
+        return True
     
     @classmethod
     async def get_user_info(cls, sid: str) -> UserInfo:
