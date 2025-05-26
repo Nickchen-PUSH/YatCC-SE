@@ -22,6 +22,9 @@ class CodespaceInfo(BaseModel):
     status: str = Field("stopped", description="代码空间状态")
     url: str = Field("", description="代码空间URL")
 
+    time_quota: int = Field(0, description="代码空间时间配额（秒）")
+    time_used: int = Field(0, description="代码空间已使用时间（秒）")
+
     last_start: float = Field(0, description="代码空间最后启动的 POSIX 时间戳")
     last_stop: float = Field(0, description="代码空间最后停止的 POSIX 时间戳")
     last_active: float = Field(0, description="代码空间最后活动的 POSIX 时间戳")
@@ -32,7 +35,7 @@ class Student(BaseModel):
     """学生信息模型"""
 
     sid: str = Field(..., max_length=32, description="学号")
-    pwd_hash: str = Field(..., description="密码哈希")
+    pwd_hash: str = Field("", description="密码哈希")
 
     user_info: UserInfo = Field(default_factory=UserInfo, description="用户信息")
     codespace: CodespaceInfo = Field(
@@ -77,6 +80,17 @@ class StudentAlreadyExistsError(Error):
 
     def __str__(self):
         return f"Student {self.sid!r} already exists: {super().__str__()}"
+
+
+class StudentDirectoryError(Error):
+    """学生目录错误"""
+
+    def __init__(self, sid: str, message: str, *args):
+        self.sid = sid
+        super().__init__(message, *args)
+
+    def __str__(self):
+        return f"Student {self.sid!r} directory error: {super().__str__()}"
 
 
 # ==================================================================================== #
@@ -131,6 +145,8 @@ class TABLE:
             "pwd_hash": student.pwd_hash,
             "user_info.name": student.user_info.name,
             "user_info.mail": student.user_info.mail,
+            "codespace.time_quota": student.codespace.time_quota,
+            "codespace.time_used": student.codespace.time_used,
             "codespace.status": student.codespace.status,
             "codespace.url": student.codespace.url,
             "codespace.last_start": str(student.codespace.last_start),
@@ -166,6 +182,9 @@ class TABLE:
 
         from config import CONFIG
 
+        if await DB_STU.exists(stu.sid):
+            raise StudentAlreadyExistsError(stu.sid)
+
         stu_path = CONFIG.CORE.students_dir + stu.sid + "/"
         if not os.path.exists(stu_path):
             try:
@@ -173,17 +192,17 @@ class TABLE:
                 os.makedirs(stu_path + "code/")
                 os.makedirs(stu_path + "io/")
                 os.makedirs(stu_path + "root/")
-            except OSError as e:
-                LOGGERR.error(f"Failed to create student directory {stu_path}: {e}")
-                raise
+            except:
+                LOGGERR.error(f"Failed to create student directory {stu_path}")
+                raise StudentDirectoryError(
+                    stu.sid,
+                    f"Failed to create student directory {stu_path}",
+                )
         else:
             LOGGERR.warning(
                 f"Student directory {stu_path} already exists, skipping creation"
             )
             return False
-
-        if await DB_STU.exists(stu.sid):
-            raise StudentAlreadyExistsError(stu.sid)
 
         ts = datetime.now().timestamp()
         stu.codespace.last_start = ts
