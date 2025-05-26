@@ -1,0 +1,136 @@
+FROM ubuntu:24.04
+
+# 避免交互式安装过程中的提示
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 设置工作目录
+WORKDIR /workspace
+
+# 安装系统依赖
+RUN apt-get update && apt-get install -y \
+    # 基础工具
+    curl \
+    wget \
+    git \
+    vim \
+    nano \
+    tree \
+    htop \
+    unzip \
+    # Python 开发环境
+    python3 \
+    python3-pip \
+    python3-venv \
+    python3-dev \
+    # 容器和构建工具
+    redis \
+    # 编译工具
+    make \
+    gcc \
+    g++ \
+    # 网络工具
+    net-tools \
+    iputils-ping \
+    # 系统工具
+    sudo \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    # code-server 依赖
+    dumb-init \
+    # minikube 依赖
+    conntrack \
+    socat \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安装 Docker
+RUN curl -fsSL https://get.docker.com -o get-docker.sh \
+    && sh get-docker.sh \
+    && rm get-docker.sh
+
+# 安装 kubectl
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl" \
+    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
+    && rm kubectl
+
+# 安装 minikube
+RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-arm64 \
+    && install minikube-linux-arm64 /usr/local/bin/minikube \
+    && rm minikube-linux-arm64
+
+# 安装 helm (可选)
+RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+# 安装 code-server
+RUN curl -fsSL https://code-server.dev/install.sh | sh
+
+# 创建 Python 虚拟环境
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# 升级 pip 并安装 Python 依赖
+RUN pip install --upgrade pip setuptools wheel
+
+# 安装项目依赖
+RUN pip install \
+    # Web 框架
+    'flask[async]' \
+    gunicorn \
+    # 数据库和缓存
+    redis \
+    # 加密和安全
+    cryptography \
+    # HTTP 客户端
+    httpx \
+    # 负载测试
+    locust \
+    # API 文档
+    'flask-openapi3[swagger, redoc, rapidoc, rapipdf, scalar, elements]' \
+    # 测试工具
+    coverage \
+    pytest \
+    pytest-asyncio \
+    pytest-cov \
+    # Kubernetes 客户端
+    kubernetes \
+    # 数据验证
+    pydantic \
+    # 开发工具
+    black \
+    isort \
+    flake8 \
+    mypy \
+    # 其他工具
+    python-dotenv
+
+# 创建非 root 用户
+RUN useradd -m -s /bin/bash developer \
+    && usermod -aG docker developer \
+    && echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+
+# 设置 Git 安全目录
+RUN git config --global --add safe.directory /workspace
+
+# 创建 code-server 配置目录
+RUN mkdir -p /home/developer/.config/code-server
+
+# 创建 minikube 和 kubernetes 配置目录
+RUN mkdir -p /home/developer/.kube \
+    && mkdir -p /home/developer/.minikube \
+    && chown -R developer:developer /home/developer/.kube \
+    && chown -R developer:developer /home/developer/.minikube
+
+# 切换到开发用户
+USER developer
+
+# 设置环境变量
+ENV PYTHONPATH="/workspace:$PYTHONPATH"
+ENV PATH="/opt/venv/bin:$PATH"
+ENV KUBECONFIG="/home/developer/.kube/config"
+ENV MINIKUBE_HOME="/home/developer/.minikube"
+
+# 暴露端口
+EXPOSE 5000 8080 8443 6379 8000 6443
+
+# 默认命令
+CMD ["/bin/bash"]
