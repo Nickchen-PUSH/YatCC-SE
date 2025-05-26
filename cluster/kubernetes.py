@@ -1,6 +1,6 @@
 """Kubernetes 集群实现
 
-code-server 镜像的部署和管理。
+专门针对用户独立的 code-server 镜像的部署和管理。
 """
 
 import asyncio as aio
@@ -71,6 +71,21 @@ class KubernetesCluster(ClusterABC):
         except Exception as e:
             logger.error(f"Failed to initialize Kubernetes cluster: {e}")
             raise ClusterError(f"Kubernetes initialization failed: {e}")
+    
+    async def ensure_initialized(self):
+        """确保已初始化"""
+        if not self._is_initialized:
+            await self.initialize()
+
+    @property
+    def apps_v1(self):
+        """获取 AppsV1Api 客户端"""
+        return self._apps_v1
+    
+    @property
+    def core_v1(self):
+        """获取 CoreV1Api 客户端"""
+        return self._core_v1
 
     async def submit_job(self, job_params: JobParams) -> JobInfo:
         """提交 code-server 作业到 Kubernetes"""
@@ -99,7 +114,7 @@ class KubernetesCluster(ClusterABC):
                 image=job_params.image,
                 ports=job_params.ports,
                 env=job_params.env,
-                status=JobInfo.Status.PENDING,
+                status=JobInfo.Status.RUNNING,
                 created_at=datetime.now().isoformat(),
                 namespace=self.config.Kubernetes.NAMESPACE,
                 service_url=service_url,
@@ -148,8 +163,8 @@ class KubernetesCluster(ClusterABC):
         """创建 Deployment"""
         # 合并默认环境变量
         env_vars = {
-            "PASSWORD": job_params.env.get("PASSWORD", f"student{job_params.user_id}"),
-            "SUDO_PASSWORD": job_params.env.get("SUDO_PASSWORD", f"student{job_params.user_id}"),
+            "PASSWORD": "23336003",
+            "SUDO_PASSWORD": "23336003",
             **job_params.env
         }
         
@@ -233,7 +248,7 @@ class KubernetesCluster(ClusterABC):
         logger.info(f"Created Deployment: {job_name}")
 
     async def _create_service(self, job_name: str, job_params: JobParams) -> str:
-        """创建 Service"""
+        """创建 Service，返回内部集群 URL"""
         service_spec = {
             "apiVersion": "v1",
             "kind": "Service",
@@ -250,19 +265,46 @@ class KubernetesCluster(ClusterABC):
                     "protocol": "TCP",
                     "name": "http"
                 }],
-                "type": "ClusterIP"
+                "type": "NodePort"
             }
         }
         
-        await aio.to_thread(
+        service = await aio.to_thread(
             self.core_v1.create_namespaced_service,
             namespace=self.config.Kubernetes.NAMESPACE,
             body=service_spec
         )
-        
+
+        node_port = service.spec.ports[0].node_port
+        service.nodeport = node_port
+
+        # 返回内部集群 URL
         service_url = f"http://{job_name}-svc.{self.config.Kubernetes.NAMESPACE}.svc.cluster.local:{self.config.CodeServer.PORT}"
-        logger.info(f"Created Service: {job_name}-svc")
+        logger.info(f"Created Service: {job_name}-svc, Internal URL: {service_url}")
         return service_url
+
+    async def get_service_url(self, job_id: str) -> str:
+        """获取指定作业的服务访问 URL - 返回内部 URL"""
+        await self.ensure_initialized()
+        
+        try:
+            service = await aio.to_thread(
+                self.core_v1.read_namespaced_service,
+                name=f"{job_id}-svc",
+                namespace=self.config.Kubernetes.NAMESPACE
+            )
+            
+            # 直接返回内部集群 URL
+            port = service.spec.ports[0].port
+            service_url = f"http://{service.metadata.name}.{service.metadata.namespace}.svc.cluster.local:{port}"
+            
+            logger.debug(f"Service URL for {job_id}: {service_url}")
+            return service_url
+            
+        except ApiException as e:
+            if e.status == 404:
+                raise JobNotFoundError(f"Service not found for job: {job_id}")
+            raise ClusterError(f"Failed to get service URL: {e}")
 
     def _build_labels(self, job_params: JobParams) -> Dict[str, str]:
         """构建标签"""
@@ -283,14 +325,13 @@ class KubernetesCluster(ClusterABC):
                 namespace=self.config.Kubernetes.NAMESPACE
             )
             
-            # 检查 Deployment 状态
+            # 确定状态
             if deployment.status.ready_replicas and deployment.status.ready_replicas >= 1:
                 return JobInfo.Status.RUNNING
             elif deployment.status.unavailable_replicas:
                 return JobInfo.Status.FAILED
             else:
                 return JobInfo.Status.PENDING
-                
         except ApiException as e:
             if e.status == 404:
                 raise JobNotFoundError(f"Job not found: {job_id}")
