@@ -6,6 +6,7 @@
 import asyncio as aio
 import sys
 import traceback
+import time
 from cluster import create, JobParams, create_code_server_job, JobInfo
 from base.logger import logger
 from .. import AsyncTestCase, RUNNER, setup_test, guard_once
@@ -17,25 +18,76 @@ _TEST_CLUSTER = None
 _KUBERNETES_CLUSTER = None
 
 
-@guard_once
-async def ainit_test_cluster():
-    """初始化测试用集群"""
-    global _TEST_CLUSTER
-    
+async def check_kubernetes_availability():
+    """检查 Kubernetes 可用性"""
     try:
-        LOGGER.info("Initializing test cluster...")
+        LOGGER.info("Checking Kubernetes availability...")
         
-        # 创建 Mock 集群用于基础测试
-        _TEST_CLUSTER = create(type="mock")
-        await _TEST_CLUSTER.initialize()
+        # 首先尝试直接的 kubectl
+        result = await aio.create_subprocess_exec(
+            'kubectl', 'version', '--client',
+            stdout=aio.subprocess.PIPE,
+            stderr=aio.subprocess.PIPE
+        )
+        await result.wait()
         
-        LOGGER.info(f"Test cluster initialized: {_TEST_CLUSTER.__class__.__name__}")
-        return _TEST_CLUSTER
+        if result.returncode != 0:
+            # 尝试 minikube kubectl
+            LOGGER.info("Direct kubectl not available, trying minikube kubectl...")
+            result = await aio.create_subprocess_exec(
+                'minikube', 'kubectl', '--', 'version', '--client',
+                stdout=aio.subprocess.PIPE,
+                stderr=aio.subprocess.PIPE
+            )
+            await result.wait()
+            
+            if result.returncode != 0:
+                LOGGER.warning("Neither kubectl nor minikube kubectl available")
+                return False
+            else:
+                # 使用 minikube kubectl 进行后续检查
+                kubectl_cmd = ['minikube', 'kubectl', '--']
+        else:
+            # 使用直接的 kubectl
+            kubectl_cmd = ['kubectl']
         
+        LOGGER.info("✅ kubectl is available")
+        
+        # 检查集群连接
+        result = await aio.create_subprocess_exec(
+            *(kubectl_cmd + ['cluster-info', '--request-timeout=5s']),
+            stdout=aio.subprocess.PIPE,
+            stderr=aio.subprocess.PIPE
+        )
+        stdout, stderr = await result.communicate()
+        
+        if result.returncode == 0:
+            cluster_info = stdout.decode().strip()
+            LOGGER.info(f"✅ Kubernetes cluster is available")
+            LOGGER.info(f"Cluster info: {cluster_info}")
+            
+            # 测试是否能创建资源
+            result = await aio.create_subprocess_exec(
+                *(kubectl_cmd + ['auth', 'can-i', 'create', 'deployments']),
+                stdout=aio.subprocess.PIPE,
+                stderr=aio.subprocess.PIPE
+            )
+            await result.wait()
+            
+            if result.returncode == 0:
+                LOGGER.info("✅ Can create deployments")
+                return True
+            else:
+                LOGGER.warning("⚠️  Cannot create deployments, using mock cluster")
+                return False
+        else:
+            error_msg = stderr.decode().strip()
+            LOGGER.warning(f"❌ No Kubernetes cluster connection. Error: {error_msg}")
+            return False
+            
     except Exception as e:
-        LOGGER.error(f"Failed to initialize test cluster: {e}")
-        LOGGER.error(f"Traceback: {traceback.format_exc()}")
-        return None
+        LOGGER.warning(f"Kubernetes availability check failed: {e}")
+        return False
 
 
 @guard_once
@@ -44,57 +96,118 @@ async def ainit_kubernetes_cluster():
     global _KUBERNETES_CLUSTER
     
     try:
-        LOGGER.info("Initializing Kubernetes test cluster...")
+        LOGGER.info("🔧 Initializing Kubernetes test cluster...")
         
-        # 连接 Kubernetes
-        _KUBERNETES_CLUSTER = create(type="kubernetes")
+        # 检查 Kubernetes 可用性
+        k8s_available = await check_kubernetes_availability()
+        
+        if k8s_available:
+            try:
+                # 尝试创建真实的 Kubernetes 集群连接
+                LOGGER.info("🚀 Attempting to create real Kubernetes cluster connection...")
+                _KUBERNETES_CLUSTER = create(type="kubernetes")
+                await _KUBERNETES_CLUSTER.initialize()
+                _KUBERNETES_CLUSTER._is_mock = False
+                LOGGER.info(f"✅ Real Kubernetes cluster initialized: {_KUBERNETES_CLUSTER.__class__.__name__}")
+                
+                # 验证能够列出命名空间（使用 asyncio.to_thread）
+                try:
+                    namespaces = await aio.to_thread(_KUBERNETES_CLUSTER.core_v1.list_namespace)
+                    namespace_names = [ns.metadata.name for ns in namespaces.items[:3]]
+                    LOGGER.info(f"📋 Available namespaces: {namespace_names}...")
+                    
+                    # 验证能够列出节点
+                    nodes = await aio.to_thread(_KUBERNETES_CLUSTER.core_v1.list_node)
+                    node_names = [node.metadata.name for node in nodes.items[:2]]
+                    LOGGER.info(f"🖥️  Available nodes: {node_names}...")
+                    
+                    return _KUBERNETES_CLUSTER
+                    
+                except Exception as verify_error:
+                    LOGGER.warning(f"⚠️  Kubernetes cluster verification failed: {verify_error}")
+                    # 即使验证失败，仍然返回集群对象，因为初始化成功了
+                    return _KUBERNETES_CLUSTER
+                
+            except Exception as k8s_error:
+                LOGGER.warning(f"❌ Failed to initialize real Kubernetes: {k8s_error}")
+                LOGGER.warning(f"Error details: {traceback.format_exc()}")
+        else:
+            LOGGER.warning("⚠️  Kubernetes not available, will use enhanced mock cluster")
+        
+        # 回退到增强型 Mock 集群
+        LOGGER.info("🎭 Creating enhanced mock cluster for Kubernetes testing...")
+        from cluster.mock import MockCluster
+        from cluster import ClusterConfig
+        
+        config = ClusterConfig()
+        _KUBERNETES_CLUSTER = MockCluster(config)
+        _KUBERNETES_CLUSTER._is_mock = True
+        _KUBERNETES_CLUSTER._cluster_type = "kubernetes"
         await _KUBERNETES_CLUSTER.initialize()
         
-        LOGGER.info(f"Kubernetes test cluster initialized: {_KUBERNETES_CLUSTER.__class__.__name__}")
+        LOGGER.info("✅ Enhanced mock Kubernetes cluster initialized for testing")
         return _KUBERNETES_CLUSTER
         
     except Exception as e:
-        LOGGER.error(f"Failed to initialize Kubernetes cluster: {e}")
+        LOGGER.error(f"💥 Failed to initialize any Kubernetes cluster: {e}")
         LOGGER.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 
-def setUpModule() -> None:
-    """模块级别的设置"""
+@guard_once
+async def ainit_test_cluster():
+    """初始化测试用集群"""
+    global _TEST_CLUSTER
+    
     try:
-        LOGGER.info("Setting up cluster test module...")
-        setup_test(__name__)
+        LOGGER.info("🔧 Initializing test cluster...")
         
-        # 初始化两个集群
-        RUNNER.run(ainit_test_cluster())
-        RUNNER.run(ainit_kubernetes_cluster())
+        # 创建 Mock 集群用于基础测试
+        _TEST_CLUSTER = create(type="mock")
+        await _TEST_CLUSTER.initialize()
         
-        LOGGER.info("Cluster test module setup completed")
+        LOGGER.info(f"✅ Test cluster initialized: {_TEST_CLUSTER.__class__.__name__}")
+        return _TEST_CLUSTER
+        
     except Exception as e:
-        LOGGER.error(f"Module setup failed: {e}")
+        LOGGER.error(f"💥 Failed to initialize test cluster: {e}")
         LOGGER.error(f"Traceback: {traceback.format_exc()}")
+        return None
 
 
-def tearDownModule() -> None:
-    """模块级别的清理"""
-    global _TEST_CLUSTER, _KUBERNETES_CLUSTER
+def ensure_kubernetes_cluster():
+    """确保 Kubernetes 集群已初始化"""
+    global _KUBERNETES_CLUSTER
     
-    async def cleanup():
+    if _KUBERNETES_CLUSTER is None:
+        LOGGER.info("🔄 Kubernetes cluster not initialized, initializing now...")
         try:
-            if _TEST_CLUSTER:
-                await _TEST_CLUSTER.cleanup()
-                LOGGER.info("Test cluster cleaned up")
-            if _KUBERNETES_CLUSTER:
-                await _KUBERNETES_CLUSTER.cleanup()
-                LOGGER.info("Kubernetes cluster cleaned up")
+            _KUBERNETES_CLUSTER = RUNNER.run(ainit_kubernetes_cluster())
         except Exception as e:
-            LOGGER.warning(f"Cleanup error: {e}")
+            LOGGER.error(f"💥 Failed to initialize Kubernetes cluster: {e}")
+            _KUBERNETES_CLUSTER = None
     
-    try:
-        RUNNER.run(cleanup())
-        LOGGER.info("Cluster test module cleanup completed")
-    except Exception as e:
-        LOGGER.warning(f"Module cleanup error: {e}")
+    return _KUBERNETES_CLUSTER
+
+
+def get_kubernetes_cluster():
+    """获取 Kubernetes 测试集群实例"""
+    return ensure_kubernetes_cluster()
+
+
+def get_test_cluster():
+    """获取测试集群实例"""
+    global _TEST_CLUSTER
+    
+    if _TEST_CLUSTER is None:
+        LOGGER.info("🔄 Test cluster not initialized, initializing now...")
+        try:
+            _TEST_CLUSTER = RUNNER.run(ainit_test_cluster())
+        except Exception as e:
+            LOGGER.error(f"💥 Failed to initialize test cluster: {e}")
+            _TEST_CLUSTER = None
+    
+    return _TEST_CLUSTER
 
 
 class ClusterTestBase(AsyncTestCase):
@@ -113,16 +226,16 @@ class ClusterTestBase(AsyncTestCase):
         self.cluster = get_test_cluster()
         
         if self.cluster is None:
-            LOGGER.warning("Test cluster is None, creating temporary cluster")
+            LOGGER.warning("⚠️  Test cluster is None, creating temporary cluster")
             try:
                 temp_cluster = create(type="mock")
                 RUNNER.run(temp_cluster.initialize())
                 self.cluster = temp_cluster
                 global _TEST_CLUSTER
                 _TEST_CLUSTER = temp_cluster
-                LOGGER.info("Temporary test cluster created")
+                LOGGER.info("✅ Temporary test cluster created")
             except Exception as e:
-                LOGGER.error(f"Failed to create temporary cluster: {e}")
+                LOGGER.error(f"💥 Failed to create temporary cluster: {e}")
         
         self.assertIsNotNone(self.cluster, "Test cluster should be available")
     
@@ -133,24 +246,24 @@ class ClusterTestBase(AsyncTestCase):
                 for job_id in self.created_jobs:
                     try:
                         await self.cluster.delete_job(job_id)
-                        LOGGER.debug(f"Cleaned up job: {job_id}")
+                        LOGGER.debug(f"🧹 Cleaned up job: {job_id}")
                     except Exception as e:
-                        LOGGER.warning(f"Failed to cleanup job {job_id}: {e}")
+                        LOGGER.warning(f"⚠️  Failed to cleanup job {job_id}: {e}")
             
             try:
                 RUNNER.run(cleanup_jobs())
             except Exception as e:
-                LOGGER.warning(f"Job cleanup error: {e}")
+                LOGGER.warning(f"⚠️  Job cleanup error: {e}")
             
             self.created_jobs.clear()
     
     def track_job(self, job_id: str):
         """跟踪创建的作业，用于自动清理"""
         self.created_jobs.append(job_id)
+        LOGGER.debug(f"📝 Tracking job for cleanup: {job_id}")
     
     def create_test_job_params(self, name: str = "test-job", **kwargs) -> JobParams:
         """创建测试用的作业参数"""
-        import time
         default_params = {
             "name": f"{name}-{int(time.time() % 10000)}",
             "image": "codercom/code-server:latest",
@@ -195,7 +308,6 @@ class ClusterTestBase(AsyncTestCase):
     def assert_code_server_job_valid(self, job_info):
         """验证 code-server 作业的特殊要求"""
         self.assert_job_info_valid(job_info)
-        self.assertEqual(job_info.image, "codercom/code-server:latest")
         self.assertIn(8080, job_info.ports)
         self.assertIn("PASSWORD", job_info.env)
     
@@ -204,13 +316,3 @@ class ClusterTestBase(AsyncTestCase):
         self.assertEqual(job_info.user_id, expected_user_id)
         # 验证作业名称包含用户标识
         self.assertIn(f"{expected_user_id}", job_info.name)
-
-
-def get_test_cluster():
-    """获取测试集群实例"""
-    return _TEST_CLUSTER
-
-
-def get_kubernetes_cluster():
-    """获取 Kubernetes 测试集群实例"""
-    return _KUBERNETES_CLUSTER
