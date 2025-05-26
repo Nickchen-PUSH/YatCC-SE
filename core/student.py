@@ -253,20 +253,34 @@ class TABLE:
     @classmethod
     async def check_password(cls, sid: str, password: str) -> bool:
         """检查学生密码"""
-        #TODO
-        return True
+        try:
+            student = await cls.read(sid)
+            return student.check_password(password)
+        except StudentNotFoundError:
+            LOGGERR.warning(f"尝试验证不存在的学生 {sid!r} 的密码")
+            return False
+
 
     @classmethod
     async def get_user_info(cls, sid: str) -> UserInfo:
         """获取学生用户信息"""
-        #TODO
-        return UserInfo(name="", mail="")
+        try:
+            student = await cls.read(sid)
+            return student.user_info
+        except StudentNotFoundError:
+            LOGGERR.warning(f"尝试获取不存在的学生 {sid!r} 的用户信息")
+            return UserInfo(name="", mail="")
 
     @classmethod
     async def set_user_info(cls, sid: str, user_info: UserInfo) -> None:
         """设置学生用户信息"""
-        #TODO
-        pass
+        try:
+            student = await cls.read(sid)
+            student.user_info = user_info
+            await cls.write(student)
+        except StudentNotFoundError:
+            LOGGERR.warning(f"尝试更新不存在的学生 {sid!r} 的用户信息")
+            raise
 
 
 class CODESPACE:
