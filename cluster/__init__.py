@@ -25,7 +25,7 @@ class ClusterConfig(Configuration):
     
     class CodeServer(Configuration):
         """code-server 专用配置"""
-        IMAGE = "codercom/code-server:latest"
+        IMAGE = "docker.io/codercom/code-server:latest"
         DEFAULT_PASSWORD = "student123"
         DEFAULT_CPU_LIMIT = "1000m"
         DEFAULT_MEMORY_LIMIT = "2Gi"
