@@ -11,3 +11,6 @@ running/
 
 # vscode
 .vscode/
+
+# cursor
+cursor-rules/
