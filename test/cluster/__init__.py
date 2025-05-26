@@ -316,3 +316,13 @@ class ClusterTestBase(AsyncTestCase):
         self.assertEqual(job_info.user_id, expected_user_id)
         # 验证作业名称包含用户标识
         self.assertIn(f"{expected_user_id}", job_info.name)
+
+
+def get_test_cluster():
+    """获取测试集群实例"""
+    return _TEST_CLUSTER
+
+
+def get_kubernetes_cluster():
+    """获取 Kubernetes 测试集群实例"""
+    return _KUBERNETES_CLUSTER
