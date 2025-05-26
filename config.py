@@ -26,7 +26,7 @@ ENVIRON.EXECUTABLE = Executable
 class Config(Configuration):
     app_dir = str(PROJECT_DIR) + "/"
     """应用程序目录，必须以 / 结尾"""
-    io_dir = str((PROJECT_DIR / "running/YatCC-OL") / "io") + "/"
+    io_dir = str((PROJECT_DIR / "running") / "io") + "/"
     """输入输出目录，必须以 / 结尾"""
     log_dir = io_dir + "log/"
     """日志目录，必须以 / 结尾"""
