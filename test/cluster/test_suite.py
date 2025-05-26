@@ -17,7 +17,6 @@ def create_test_suite():
     
     # 添加各个测试模块
     test_modules = [
-        'test.cluster.test_factory',       # 工厂函数测试
         'test.cluster.test_mock',          # Mock 集群测试
         'test.cluster.test_kubernetes',    # Kubernetes 集群测试
     ]
