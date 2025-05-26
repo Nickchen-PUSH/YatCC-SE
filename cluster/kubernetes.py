@@ -1,6 +1,6 @@
 """Kubernetes 集群实现
 
-专门针对用户独立的 code-server 镜像的部署和管理。
+code-server 镜像的部署和管理。
 """
 
 import asyncio as aio
@@ -114,7 +114,7 @@ class KubernetesCluster(ClusterABC):
                 image=job_params.image,
                 ports=job_params.ports,
                 env=job_params.env,
-                status=JobInfo.Status.RUNNING,
+                status=JobInfo.Status.PENDING,
                 created_at=datetime.now().isoformat(),
                 namespace=self.config.Kubernetes.NAMESPACE,
                 service_url=service_url,
@@ -163,8 +163,8 @@ class KubernetesCluster(ClusterABC):
         """创建 Deployment"""
         # 合并默认环境变量
         env_vars = {
-            "PASSWORD": "23336003",
-            "SUDO_PASSWORD": "23336003",
+            "PASSWORD": job_params.env.get("PASSWORD", f"student{job_params.user_id}"),
+            "SUDO_PASSWORD": job_params.env.get("SUDO_PASSWORD", f"student{job_params.user_id}"),
             **job_params.env
         }
         
