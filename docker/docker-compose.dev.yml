@@ -1,0 +1,69 @@
+services:
+  dev:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.dev
+    container_name: yatcc-dev-env
+    privileged: true
+    volumes:
+      - ..:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      - minikube_dev_data:/home/developer/.minikube
+      - kube_dev_data:/home/developer/.kube
+      - docker_dev_data:/home/developer/.docker
+    ports:
+      - "5001:5000"
+      - "8081:8080"
+      - "8444:8443"
+      - "6444:6443"  # Kubernetes API Server
+      - "30000-30100:30000-30100"  # NodePort 服务端口范围
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    environment:
+      - PYTHONPATH=/workspace
+      - MINIKUBE_HOME=/home/developer/.minikube
+      - KUBECONFIG=/home/developer/.kube/config
+      - YatCC_OL_TESTING=/workspace/testing
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      # minikube 配置
+      - MINIKUBE_DRIVER=docker
+      - MINIKUBE_CONTAINER_RUNTIME=docker
+    command: /bin/bash
+    depends_on:
+      - redis
+      - postgres
+    # 增加资源限制
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+          cpus: '3.0'
+
+  redis:
+    image: redis:7-alpine
+    container_name: yatcc-redis-dev
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_dev_data:/data
+    command: redis-server --appendonly yes
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: yatcc-postgres-dev
+    environment:
+      POSTGRES_DB: yatcc_dev
+      POSTGRES_USER: developer
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+
+volumes:
+  redis_dev_data:
+  postgres_dev_data:
+  minikube_dev_data:
+  kube_dev_data:
+  docker_dev_data:
