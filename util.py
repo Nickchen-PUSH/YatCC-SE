@@ -3,7 +3,7 @@ from hashlib import blake2b
 
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms
 
-from . import CONFIG
+from config import CONFIG
 
 _api_key_ci = Cipher(
     algorithms.ChaCha20(
