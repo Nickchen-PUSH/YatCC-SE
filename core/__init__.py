@@ -55,3 +55,13 @@ async def ready() -> bool:
 
 class Error(Exception):
     pass
+
+class OversizeError(Error):
+
+    def __init__(self, data: str | bytes, limit: int, *args):
+        self.data = data
+        self.limit = limit
+        super().__init__(*args)
+
+    def __str__(self) -> str:
+        return f"oversize: {self.data!r} > {self.limit}: {super().__str__()}"
