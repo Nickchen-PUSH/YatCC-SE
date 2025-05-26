@@ -32,7 +32,9 @@ class Config(Configuration):
     """日志目录，必须以 / 结尾"""
     log_level = 1
     """日志级别"""
-
+    api_key_secret = b"\x00" * 32
+    """用于加密 API-KEY 的密钥，必须是 32 字节"""
+    
     CORE: type["Core"]
     """核心模块配置"""
 
