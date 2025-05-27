@@ -6,10 +6,15 @@
 import asyncio as aio
 import uuid
 import logging
+import threading
+import socket
+import time
+from config import CONFIG
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from kubernetes import client, config
 from kubernetes.client.rest import ApiException
+from kubernetes.stream import portforward
 
 from . import (
     ClusterABC, JobParams, JobInfo, ClusterConfig,
@@ -29,6 +34,8 @@ class KubernetesCluster(ClusterABC):
         self._core_v1 = None
         self._networking_v1 = None
         self._is_initialized = False
+        self._port_forwards: Dict[str, Dict] = {}
+        self._local_port_base = 30000  # 本地端口基数，用于端口转发
     
     async def initialize(self):
         """初始化 Kubernetes 集群连接"""
@@ -95,12 +102,42 @@ class KubernetesCluster(ClusterABC):
         if not job_params.user_id:
             raise ValueError("user_id is required")
         
+        existing_job = await self._find_user_deployment(job_params)
+
+        if existing_job:
+            return await self._resume_user_deployment(existing_job, job_params)
+        else:
+            logger.info("No existing deployment found for user {job_params.user_id}, creating a new one.")
+            return await self._create_new_deployment(job_params)
+
+    async def _find_user_deployment(self, job_params: JobParams) -> Optional[JobInfo]:
+        """查找用户的现有 Deployment"""
+        try:
+            deployments = await aio.to_thread(
+                self.apps_v1.list_namespaced_deployment,
+                namespace = self.config.Kubernetes.NAMESPACE,
+                label_selector=f"managed-by=yatcc-se,user-id={str(job_params.user_id)},type=code-server"
+            )
+
+            if deployments.items:
+                deployment = deployments.items[0]
+                job_name = deployment.metadata.name
+                logger.info(f"Found existing deployment for user {job_params.user_id}: {job_name}")
+                return job_name
+
+            return None
+        except ApiException as e:
+            logger.warning(f"Error finding user deployment: {e}")
+            return None
+        
+    async def _create_new_deployment(self, job_params: JobParams) -> JobInfo:
+        """创建用户 Deployment"""
         # 生成唯一作业名称
         job_name = self._generate_job_name(job_params)
         
         try:
             # 创建持久化存储
-            await self._create_pvc(job_name, job_params)
+            # await self._create_pvc(job_name, job_params)
             
             # 创建 Deployment
             await self._create_deployment(job_name, job_params)
@@ -127,44 +164,318 @@ class KubernetesCluster(ClusterABC):
             await self._cleanup_job_resources(job_name)
             raise ClusterError(f"Failed to submit job: {e}")
 
+    async def _resume_user_deployment(self, job_id: str, job_params: JobParams) -> JobInfo:
+        """恢复用户的 Deployment"""
+        try:
+            deployment = await aio.to_thread(
+                self.apps_v1.read_namespaced_deployment,
+                name=job_id,
+                namespace=self.config.Kubernetes.NAMESPACE
+            )
+            
+            # 检查是否被暂停
+            annotations = deployment.metadata.annotations or {}
+            is_suspended = annotations.get("yatcc-se/suspended") == "true"
+            
+            logger.info(f"Checking deployment {job_id} suspension status:")
+            logger.info(f"  - Annotations: {annotations}")
+            logger.info(f"  - Is suspended: {is_suspended}")
+            
+            if is_suspended:
+                # 恢复 Deployment
+                logger.info(f"Unsuspending deployment: {job_id}")
+                await self._unsuspend_deployment(job_id)
+                logger.info(f"Resumed suspended deployment: {job_id}")
+                
+                # 等待一下，然后重新读取 deployment 以获取最新状态
+                await aio.sleep(2)
+                deployment = await aio.to_thread(
+                    self.apps_v1.read_namespaced_deployment,
+                    name=job_id,
+                    namespace=self.config.Kubernetes.NAMESPACE
+                )
+                
+                # 验证注解是否被移除
+                updated_annotations = deployment.metadata.annotations or {}
+                logger.info(f"After unsuspend, annotations: {updated_annotations}")
+            else:
+                # Deployment 已经在运行
+                logger.info(f"Deployment {job_id} is already running")
+            
+            # 🎯 更新环境变量和配置（如果有变化）
+            await self._update_deployment_if_needed(job_id, job_params)
+            
+            # 确保 Service 存在
+            service_url = await self._ensure_service_exists(job_id, job_params)
+            
+            # 再次读取最新的 deployment 状态
+            final_deployment = await aio.to_thread(
+                self.apps_v1.read_namespaced_deployment,
+                name=job_id,
+                namespace=self.config.Kubernetes.NAMESPACE
+            )
+            
+            # 返回 JobInfo
+            return await self._build_job_info_from_deployment(final_deployment, service_url)
+            
+        except ApiException as e:
+            if e.status == 404:
+                # Deployment 不存在了，创建新的
+                logger.warning(f"Deployment {job_id} not found, creating new one")
+                return await self._create_new_deployment(job_params)
+            raise ClusterError(f"Failed to resume deployment: {e}")
+
+    async def _create_new_deployment(self, job_params: JobParams) -> JobInfo:
+        """创建新的 Deployment"""
+        # 生成唯一作业名称
+        job_name = self._generate_job_name(job_params)
+        
+        try:
+            # 创建 Deployment
+            await self._create_deployment(job_name, job_params)
+            
+            # 创建 Service
+            service_url = await self._create_service(job_name, job_params)
+            
+            return JobInfo(
+                id=job_name,
+                name=job_params.name,
+                image=job_params.image,
+                ports=job_params.ports,
+                env=job_params.env,
+                status=JobInfo.Status.RUNNING,
+                created_at=datetime.now().isoformat(),
+                namespace=self.config.Kubernetes.NAMESPACE,
+                service_url=service_url,
+                user_id=job_params.user_id,
+            )
+            
+        except Exception as e:
+            logger.error(f"Failed to submit job: {e}")
+            # 清理可能创建的资源
+            await self._cleanup_job_resources(job_name)
+            raise ClusterError(f"Failed to submit job: {e}")
+
+    async def _unsuspend_deployment(self, job_id: str) -> None:
+        """恢复被暂停的 Deployment"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"Unsuspending deployment {job_id} (attempt {attempt + 1})")
+                
+                # 重新读取最新的 deployment
+                deployment = await aio.to_thread(
+                    self.apps_v1.read_namespaced_deployment,
+                    name=job_id,
+                    namespace=self.config.Kubernetes.NAMESPACE
+                )
+                
+                annotations = deployment.metadata.annotations or {}
+                logger.info(f"Current annotations before unsuspend: {annotations}")
+                
+                # 修复：正确获取原始副本数
+                original_replicas_str = annotations.get("yatcc-se/original-replicas", "1")
+                try:
+                    original_replicas = int(original_replicas_str)
+                except ValueError:
+                    logger.warning(f"Invalid original-replicas value: {original_replicas_str}, using default 1")
+                    original_replicas = 1
+                
+                # 恢复副本数
+                deployment.spec.replicas = original_replicas
+                logger.info(f"Setting replicas to: {original_replicas}")
+                
+                # 🎯 关键修复：确保注解被完全删除
+                # 创建新的注解字典，排除暂停相关的注解
+                new_annotations = {}
+                for key, value in annotations.items():
+                    if key not in ["yatcc-se/suspended", "yatcc-se/original-replicas"]:
+                        new_annotations[key] = value
+                
+                # 设置新的注解字典
+                deployment.metadata.annotations = new_annotations
+                
+                logger.info(f"New annotations after removal: {new_annotations}")
+                logger.info(f"Removed annotations: yatcc-se/suspended, yatcc-se/original-replicas")
+                
+                # 执行更新
+                updated_deployment = await aio.to_thread(
+                    self.apps_v1.patch_namespaced_deployment,
+                    name=job_id,
+                    namespace=self.config.Kubernetes.NAMESPACE,
+                    body=deployment
+                )
+                
+                logger.info(f"Successfully unsuspended deployment: {job_id}")
+                logger.info(f"Final replicas: {updated_deployment.spec.replicas}")
+                logger.info(f"Final annotations: {updated_deployment.metadata.annotations}")
+                return
+                
+            except ApiException as e:
+                if e.status == 409 and attempt < max_retries - 1:
+                    # 版本冲突，等待一下再重试
+                    logger.warning(f"Deployment {job_id} version conflict, retrying... (attempt {attempt + 1})")
+                    await aio.sleep(0.5 * (attempt + 1))  # 递增等待时间
+                    continue
+                elif e.status == 404:
+                    logger.warning(f"Deployment {job_id} not found during unsuspend")
+                    return
+                else:
+                    raise ClusterError(f"Failed to unsuspend deployment: {e}")
+            except Exception as e:
+                logger.error(f"Unexpected error unsuspending {job_id}: {e}")
+                raise ClusterError(f"Unexpected error unsuspending deployment: {e}")
+    
+
+    async def _update_deployment_if_needed(self, job_id: str, job_params: JobParams) -> bool:
+        """如果需要，更新 Deployment 的配置"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # 重新读取最新的 deployment
+                deployment = await aio.to_thread(
+                    self.apps_v1.read_namespaced_deployment,
+                    name=job_id,
+                    namespace=self.config.Kubernetes.NAMESPACE
+                )
+                
+                container = deployment.spec.template.spec.containers[0]
+                current_env = {env_var.name: env_var.value for env_var in (container.env or [])}
+                
+                # 检查是否需要更新环境变量
+                needs_update = False
+                
+                # 比较环境变量
+                for key, value in job_params.env.items():
+                    if current_env.get(key) != value:
+                        needs_update = True
+                        break
+                
+                # 比较资源限制
+                current_limits = container.resources.limits or {}
+                if (current_limits.get("memory") != job_params.memory_limit or
+                    current_limits.get("cpu") != job_params.cpu_limit):
+                    needs_update = True
+                
+                if needs_update:
+                    # 更新环境变量
+                    container.env = [{"name": k, "value": v} for k, v in job_params.env.items()]
+                    
+                    # 更新资源限制
+                    container.resources.limits = {
+                        "memory": job_params.memory_limit or self.config.CodeServer.DEFAULT_MEMORY_LIMIT,
+                        "cpu": job_params.cpu_limit or self.config.CodeServer.DEFAULT_CPU_LIMIT
+                    }
+                    
+                    await aio.to_thread(
+                        self.apps_v1.patch_namespaced_deployment,
+                        name=job_id,
+                        namespace=self.config.Kubernetes.NAMESPACE,
+                        body=deployment
+                    )
+                    
+                    logger.info(f"Updated deployment configuration: {job_id}")
+                    return True
+                
+                return False
+                
+            except ApiException as e:
+                if e.status == 409 and attempt < max_retries - 1:
+                    # 版本冲突，等待一下再重试
+                    logger.warning(f"Deployment {job_id} update conflict, retrying... (attempt {attempt + 1})")
+                    await aio.sleep(0.5 * (attempt + 1))
+                    continue
+                elif e.status == 404:
+                    logger.warning(f"Deployment {job_id} not found during update")
+                    return False
+                else:
+                    logger.warning(f"Failed to update deployment {job_id}: {e}")
+                    return False
+        
+        logger.warning(f"Failed to update deployment {job_id} after {max_retries} attempts")
+        return False
+
+    async def _ensure_service_exists(self, job_id: str, job_params: JobParams) -> str:
+        """确保 Service 存在"""
+        try:
+            service = await aio.to_thread(
+                self.core_v1.read_namespaced_service,
+                name=f"{job_id}-svc",
+                namespace=self.config.Kubernetes.NAMESPACE
+            )
+            
+            # Service 存在，返回 URL
+            return f"http://{service.metadata.name}.{service.metadata.namespace}.svc.cluster.local:{service.spec.ports[0].port}"
+            
+        except ApiException as e:
+            if e.status == 404:
+                # Service 不存在，创建它
+                logger.info(f"Service not found for {job_id}, creating...")
+                return await self._create_service(job_id, job_params)
+            raise ClusterError(f"Failed to check service: {e}")
+
+    async def _build_job_info_from_deployment(self, deployment, service_url: str) -> JobInfo:
+        """从 Deployment 构建 JobInfo"""
+        container = deployment.spec.template.spec.containers[0]
+        labels = deployment.metadata.labels or {}
+        
+        # 确定状态
+        if deployment.status.ready_replicas and deployment.status.ready_replicas >= 1:
+            status = JobInfo.Status.RUNNING
+        elif deployment.status.unavailable_replicas:
+            status = JobInfo.Status.FAILED
+        else:
+            status = JobInfo.Status.PENDING
+        
+        return JobInfo(
+            id=deployment.metadata.name,
+            name=deployment.metadata.labels.get("app", deployment.metadata.name),
+            image=container.image,
+            ports=[self.config.CodeServer.PORT],
+            env={env_var.name: env_var.value for env_var in (container.env or [])},
+            status=status,
+            created_at=deployment.metadata.creation_timestamp.isoformat() if deployment.metadata.creation_timestamp else None,
+            namespace=deployment.metadata.namespace,
+            service_url=service_url,
+            user_id=int(labels.get("user-id", 0)) if labels.get("user-id") else None,
+        )
+
     def _generate_job_name(self, job_params: JobParams) -> str:
         """生成作业名称"""
         base_name = f"codeserver-{job_params.user_id}"
         return f"{base_name}-{uuid.uuid4().hex[:6]}"
 
-    async def _create_pvc(self, job_name: str, job_params: JobParams):
-        """创建持久化存储卷"""
-        pvc_spec = {
-            "apiVersion": "v1",
-            "kind": "PersistentVolumeClaim",
-            "metadata": {
-                "name": f"{job_name}-pvc",
-                "labels": self._build_labels(job_params),
-                "namespace": self.config.Kubernetes.NAMESPACE
-            },
-            "spec": {
-                "accessModes": ["ReadWriteOnce"],
-                "resources": {
-                    "requests": {
-                        "storage": job_params.storage_size or self.config.CodeServer.DEFAULT_STORAGE_SIZE
-                    }
-                }
-            }
-        }
+    # async def _create_pvc(self, job_name: str, job_params: JobParams):
+    #     """创建持久化存储卷"""
+    #     pvc_spec = {
+    #         "apiVersion": "v1",
+    #         "kind": "PersistentVolumeClaim",
+    #         "metadata": {
+    #             "name": f"{job_name}-pvc",
+    #             "labels": self._build_labels(job_params),
+    #             "namespace": self.config.Kubernetes.NAMESPACE
+    #         },
+    #         "spec": {
+    #             "accessModes": ["ReadWriteOnce"],
+    #             "resources": {
+    #                 "requests": {
+    #                     "storage": job_params.storage_size or self.config.CodeServer.DEFAULT_STORAGE_SIZE
+    #                 }
+    #             }
+    #         }
+    #     }
         
-        await aio.to_thread(
-            self.core_v1.create_namespaced_persistent_volume_claim,
-            namespace=self.config.Kubernetes.NAMESPACE,
-            body=pvc_spec
-        )
-        logger.info(f"Created PVC: {job_name}-pvc")
+        # await aio.to_thread(
+        #     self.core_v1.create_namespaced_persistent_volume_claim,
+        #     namespace=self.config.Kubernetes.NAMESPACE,
+        #     body=pvc_spec
+        # )
+        # logger.info(f"Created PVC: {job_name}-pvc")
 
     async def _create_deployment(self, job_name: str, job_params: JobParams):
         """创建 Deployment"""
         # 合并默认环境变量
         env_vars = {
-            "PASSWORD": "23336003",
-            "SUDO_PASSWORD": "23336003",
             **job_params.env
         }
         
@@ -197,10 +508,20 @@ class KubernetesCluster(ClusterABC):
                                 "--disable-telemetry",
                                 "/workspace"
                             ],
-                            "volumeMounts": [{
-                                "name": "workspace",
+                            "volumeMounts": [
+                                {
+                                "name": "code",
                                 "mountPath": "/workspace"
-                            }],
+                                },
+                                {
+                                    "name": "io",
+                                    "mountPath": "/io"
+                                },
+                                {
+                                    "name": "root",
+                                    "mountPath": "/data"
+                                }
+                            ],
                             "resources": {
                                 "requests": {
                                     "memory": "256Mi",
@@ -209,7 +530,7 @@ class KubernetesCluster(ClusterABC):
                                 "limits": {
                                     "memory": job_params.memory_limit or self.config.CodeServer.DEFAULT_MEMORY_LIMIT,
                                     "cpu": job_params.cpu_limit or self.config.CodeServer.DEFAULT_CPU_LIMIT
-                                }
+                                },
                             },
                             "readinessProbe": {
                                 "httpGet": {
@@ -228,12 +549,29 @@ class KubernetesCluster(ClusterABC):
                                 "periodSeconds": 30
                             }
                         }],
-                        "volumes": [{
-                            "name": "workspace",
-                            "persistentVolumeClaim": {
-                                "claimName": f"{job_name}-pvc"
+                        "volumes": [
+                            {
+                                "name": "code",
+                                "hostPath": {
+                                    "path": f"{CONFIG.CORE.students_dir}/{str(job_params.user_id)}/code",
+                                    "type": "DirectoryOrCreate"
+                                }
+                            },
+                            {
+                                "name": "io",
+                                "hostPath": {
+                                    "path": f"{CONFIG.CORE.students_dir}/{str(job_params.user_id)}/io",
+                                    "type": "DirectoryOrCreate"
+                                }
+                            },
+                            {
+                                "name": "root",
+                                "hostPath": {
+                                    "path": f"{CONFIG.CORE.students_dir}/{str(job_params.user_id)}/root",
+                                    "type": "DirectoryOrCreate"
+                                }
                             }
-                        }],
+                        ],
                         "restartPolicy": "Always"
                     }
                 }
@@ -283,28 +621,200 @@ class KubernetesCluster(ClusterABC):
         logger.info(f"Created Service: {job_name}-svc, Internal URL: {service_url}")
         return service_url
 
-    async def get_service_url(self, job_id: str) -> str:
-        """获取指定作业的服务访问 URL - 返回内部 URL"""
+    async def get_service_url(self, job_name: str) -> str:
+        """获取指定作业的服务访问 URL - 创建端口转发并返回本地 URL"""
         await self.ensure_initialized()
         
         try:
+            # 先检查 Service 是否存在
             service = await aio.to_thread(
                 self.core_v1.read_namespaced_service,
-                name=f"{job_id}-svc",
+                name=f"{job_name}-svc",
                 namespace=self.config.Kubernetes.NAMESPACE
             )
             
-            # 直接返回内部集群 URL
-            port = service.spec.ports[0].port
-            service_url = f"http://{service.metadata.name}.{service.metadata.namespace}.svc.cluster.local:{port}"
+            # 检查是否已有端口转发
+            if job_name in self._port_forwards:
+                forward_info = self._port_forwards[job_name]
+                if forward_info['thread'].is_alive():
+                    local_url = f"http://localhost:{forward_info['local_port']}"
+                    logger.debug(f"Using existing port forward for {job_name}: {local_url}")
+                    return local_url
+                else:
+                    # 清理无效的端口转发
+                    del self._port_forwards[job_name]
             
-            logger.debug(f"Service URL for {job_id}: {service_url}")
-            return service_url
+            # 创建新的端口转发
+            local_port = self._get_available_local_port()
+            target_port = service.spec.ports[0].port
             
+            # 使用 kubectl port-forward 创建端口转发
+            success = await self._create_kubectl_port_forward(
+                job_name=job_name,
+                local_port=local_port,
+                target_port=target_port
+            )
+            
+            if success:
+                local_url = f"http://localhost:{local_port}"
+                logger.info(f"Created port forward for {job_name}: {local_url} -> {target_port}")
+                return local_url
+            else:
+                raise ClusterError(f"Failed to create port forward for {job_name}")
+                
         except ApiException as e:
             if e.status == 404:
-                raise JobNotFoundError(f"Service not found for job: {job_id}")
+                raise JobNotFoundError(f"Service not found for job: {job_name}")
             raise ClusterError(f"Failed to get service URL: {e}")
+
+    async def _create_kubectl_port_forward(self, job_name: str, local_port: int, target_port: int) -> bool:
+        """使用 kubectl port-forward 创建端口转发"""
+        import subprocess
+        import signal
+        
+        def port_forward_worker():
+            try:
+                service_name = f"{job_name}-svc"
+                
+                # 构建 kubectl port-forward 命令
+                cmd = [
+                    'kubectl', 'port-forward',
+                    f'svc/{service_name}',
+                    f'{local_port}:{target_port}',
+                    '-n', self.config.Kubernetes.NAMESPACE
+                ]
+                
+                logger.info(f"Starting port forward: {' '.join(cmd)}")
+                
+                # 启动端口转发进程
+                process = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True
+                )
+                
+                # 保存进程引用
+                forward_info = self._port_forwards.get(job_name, {})
+                forward_info['process'] = process
+                self._port_forwards[job_name] = forward_info
+                
+                # 等待进程结束或停止信号
+                stop_event = forward_info.get('stop_event', threading.Event())
+                
+                while not stop_event.is_set():
+                    if process.poll() is not None:
+                        # 进程已结束
+                        stdout, stderr = process.communicate()
+                        if stderr:
+                            logger.error(f"Port forward error for {job_name}: {stderr}")
+                        break
+                    time.sleep(1)
+                
+                # 清理进程
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        
+            except Exception as e:
+                logger.error(f"Port forward worker error for {job_name}: {e}")
+        
+        try:
+            # 创建停止事件
+            stop_event = threading.Event()
+            
+            # 启动端口转发线程
+            thread = threading.Thread(target=port_forward_worker, daemon=True)
+            thread.start()
+            
+            # 存储端口转发信息
+            self._port_forwards[job_name] = {
+                'thread': thread,
+                'local_port': local_port,
+                'target_port': target_port,
+                'service_name': f"{job_name}-svc",
+                'stop_event': stop_event,
+                'process': None  # 将在线程中设置
+            }
+            
+            # 等待端口转发建立（检查端口是否可用）
+            for i in range(10):  # 最多等待 10 秒
+                await aio.sleep(1)
+                if await self._test_local_port(local_port):
+                    logger.info(f"Port forward established for {job_name} on localhost:{local_port}")
+                    return True
+            
+            # 如果 10 秒后仍不可用，清理并返回失败
+            await self.stop_port_forward(job_name)
+            logger.error(f"Port forward failed to establish for {job_name}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Failed to create port forward for {job_name}: {e}")
+            return False
+
+    async def _test_local_port(self, port: int) -> bool:
+        """测试本地端口是否可用"""
+        try:
+            future = aio.get_event_loop().run_in_executor(
+                None, 
+                self._sync_test_local_port, 
+                port
+            )
+            return await future
+        except Exception:
+            return False
+
+    def _sync_test_local_port(self, port: int) -> bool:
+        """同步测试本地端口"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(2)
+                result = sock.connect_ex(('localhost', port))
+                return result == 0
+        except Exception:
+            return False
+
+    async def stop_port_forward(self, job_name: str) -> None:
+        """停止指定作业的端口转发"""
+        if job_name in self._port_forwards:
+            forward_info = self._port_forwards[job_name]
+            
+            # 设置停止事件
+            if 'stop_event' in forward_info:
+                forward_info['stop_event'].set()
+            
+            # 终止进程
+            if 'process' in forward_info and forward_info['process']:
+                process = forward_info['process']
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+            
+            # 等待线程结束
+            if 'thread' in forward_info and forward_info['thread'].is_alive():
+                forward_info['thread'].join(timeout=5)
+            
+            del self._port_forwards[job_name]
+            logger.info(f"Stopped port forward for {job_name}")
+
+    def _get_available_local_port(self) -> int:
+        """获取可用的本地端口"""
+        for port in range(self._local_port_base, self._local_port_base + 1000):
+            if port not in [info['local_port'] for info in self._port_forwards.values()]:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                    try:
+                        sock.bind(('localhost', port))
+                        return port
+                    except OSError:
+                        continue
+        raise ClusterError("No available local port found")
 
     def _build_labels(self, job_params: JobParams) -> Dict[str, str]:
         """构建标签"""
@@ -314,14 +824,14 @@ class KubernetesCluster(ClusterABC):
             "type": "code-server"
         }
 
-    async def get_job_status(self, job_id: str) -> JobInfo.Status:
+    async def get_job_status(self, job_name: str) -> JobInfo.Status:
         """获取作业状态"""
         await self.ensure_initialized()
         
         try:
             deployment = await aio.to_thread(
                 self.apps_v1.read_namespaced_deployment,
-                name=job_id,
+                name=job_name,
                 namespace=self.config.Kubernetes.NAMESPACE
             )
             
@@ -334,17 +844,17 @@ class KubernetesCluster(ClusterABC):
                 return JobInfo.Status.PENDING
         except ApiException as e:
             if e.status == 404:
-                raise JobNotFoundError(f"Job not found: {job_id}")
+                raise JobNotFoundError(f"Job not found: {job_name}")
             raise ClusterError(f"Failed to get job status: {e}")
 
-    async def get_job_info(self, job_id: str) -> JobInfo:
+    async def get_job_info(self, job_name: str) -> JobInfo:
         """获取作业详细信息"""
         await self.ensure_initialized()
         
         try:
             deployment = await aio.to_thread(
                 self.apps_v1.read_namespaced_deployment,
-                name=job_id,
+                name=job_name,
                 namespace=self.config.Kubernetes.NAMESPACE
             )
             
@@ -364,7 +874,7 @@ class KubernetesCluster(ClusterABC):
             try:
                 service = await aio.to_thread(
                     self.core_v1.read_namespaced_service,
-                    name=f"{job_id}-svc",
+                    name=f"{job_name}-svc",
                     namespace=self.config.Kubernetes.NAMESPACE
                 )
                 service_url = f"http://{service.metadata.name}.{service.metadata.namespace}.svc.cluster.local:{self.config.CodeServer.PORT}"
@@ -388,14 +898,99 @@ class KubernetesCluster(ClusterABC):
             if e.status == 404:
                 raise JobNotFoundError(f"Job not found: {job_id}")
             raise ClusterError(f"Failed to get job info: {e}")
+    
+    async def delete_job(self, user_id: int) -> List[str]:
+        """根据用户ID临时关闭用户的所有 Deployment"""
+        await self.ensure_initialized()
+        
+        try:
+            # 查找用户的所有 Deployment
+            deployments = await aio.to_thread(
+                self.apps_v1.list_namespaced_deployment,
+                namespace=self.config.Kubernetes.NAMESPACE,
+                label_selector=f"managed-by=yatcc-se,user-id={user_id}"
+            )
+            
+            suspended_jobs = []
+            
+            for deployment in deployments.items:
+                job_id = deployment.metadata.name
+                current_replicas = deployment.spec.replicas
+                
+                # 停止端口转发
+                await self.stop_port_forward(job_id)
+                
+                # 使用重试机制更新 deployment
+                success = await self._suspend_deployment_with_retry(job_id, current_replicas)
+                if success:
+                    suspended_jobs.append(job_id)
+                    logger.info(f"Suspended deployment: {job_id} (user: {user_id})")
+                else:
+                    logger.warning(f"Failed to suspend deployment: {job_id}")
+            
+            logger.info(f"Suspended {len(suspended_jobs)} deployments for user {user_id}")
+            return suspended_jobs
+            
+        except ApiException as e:
+            if e.status == 404:
+                raise JobNotFoundError(f"No deployments found for user: {user_id}")
+            raise ClusterError(f"Failed to suspend deployments: {e}")
 
-    async def delete_job(self, job_id: str) -> None:
+    async def _suspend_deployment_with_retry(self, job_id: str, original_replicas: int) -> bool:
+        """使用重试机制暂停 deployment"""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                # 重新读取最新的 deployment
+                deployment = await aio.to_thread(
+                    self.apps_v1.read_namespaced_deployment,
+                    name=job_id,
+                    namespace=self.config.Kubernetes.NAMESPACE
+                )
+                
+                # 保存当前副本数到注解中，以便恢复
+                annotations = deployment.metadata.annotations or {}
+                annotations["yatcc-se/suspended"] = "true"
+                annotations["yatcc-se/original-replicas"] = str(original_replicas)
+                
+                # 更新 Deployment：设置副本数为 0 并添加注解
+                deployment.spec.replicas = 0
+                deployment.metadata.annotations = annotations
+                
+                await aio.to_thread(
+                    self.apps_v1.patch_namespaced_deployment,
+                    name=job_id,
+                    namespace=self.config.Kubernetes.NAMESPACE,
+                    body=deployment
+                )
+                
+                return True
+                
+            except ApiException as e:
+                if e.status == 409 and attempt < max_retries - 1:
+                    # 版本冲突，等待一下再重试
+                    logger.warning(f"Deployment {job_id} suspend conflict, retrying... (attempt {attempt + 1})")
+                    await aio.sleep(0.5 * (attempt + 1))
+                    continue
+                elif e.status == 404:
+                    logger.warning(f"Deployment {job_id} not found during suspend")
+                    return False
+                else:
+                    logger.error(f"Failed to suspend deployment {job_id}: {e}")
+                    return False
+        
+        logger.error(f"Failed to suspend deployment {job_id} after {max_retries} attempts")
+        return False
+
+    async def cleanup(self, job_name: str) -> None:
         """删除作业"""
         await self.ensure_initialized()
         
         try:
-            await self._cleanup_job_resources(job_id)
-            logger.info(f"Job deleted: {job_id}")
+            await self.stop_port_forward(job_name)
+
+            await self._cleanup_job_resources(job_name)
+            logger.info(f"Job deleted: {job_name}")
         except ApiException as e:
             if e.status != 404:
                 raise ClusterError(f"Failed to delete job: {e}")
@@ -429,16 +1024,16 @@ class KubernetesCluster(ClusterABC):
                 logger.warning(f"Failed to delete service {job_name}-svc: {e}")
         
         # 删除 PVC
-        try:
-            await aio.to_thread(
-                self.core_v1.delete_namespaced_persistent_volume_claim,
-                name=f"{job_name}-pvc",
-                namespace=namespace
-            )
-            logger.info(f"Deleted PVC: {job_name}-pvc")
-        except ApiException as e:
-            if e.status != 404:
-                logger.warning(f"Failed to delete PVC {job_name}-pvc: {e}")
+        # try:
+        #     await aio.to_thread(
+        #         self.core_v1.delete_namespaced_persistent_volume_claim,
+        #         name=f"{job_name}-pvc",
+        #         namespace=namespace
+        #     )
+        #     logger.info(f"Deleted PVC: {job_name}-pvc")
+        # except ApiException as e:
+        #     if e.status != 404:
+        #         logger.warning(f"Failed to delete PVC {job_name}-pvc: {e}")
 
     async def list_jobs(self) -> List[JobInfo]:
         """列出所有作业"""
