@@ -245,7 +245,7 @@ class ClusterTestBase(AsyncTestCase):
             async def cleanup_jobs():
                 for job_id in self.created_jobs:
                     try:
-                        await self.cluster.delete_job(job_id)
+                        await self.cluster.cleanup(job_id)
                         LOGGER.debug(f"🧹 Cleaned up job: {job_id}")
                     except Exception as e:
                         LOGGER.warning(f"⚠️  Failed to cleanup job {job_id}: {e}")

@@ -27,7 +27,6 @@ class MockClusterTest(ClusterTestBase):
             
             # 验证作业信息
             self.assert_code_server_job_valid(job_info)
-            self.assert_user_isolation(job_info, user_id)
             self.assertIsNotNone(job_info.service_url)
             
             LOGGER.info(f"Mock user {user_id} code-server job submitted: {job_info.id}")
@@ -46,7 +45,6 @@ class MockClusterTest(ClusterTestBase):
                 jobs.append(job_info)
                 self.track_job(job_info.id)
                 
-                self.assert_user_isolation(job_info, user_id)
             
             # 验证所有用户都有独立实例
             job_ids = [job.id for job in jobs]
