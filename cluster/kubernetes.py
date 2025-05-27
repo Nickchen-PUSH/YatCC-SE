@@ -8,6 +8,7 @@ import uuid
 import logging
 import threading
 import socket
+import subprocess
 import time
 from config import CONFIG
 from datetime import datetime
@@ -675,6 +676,7 @@ class KubernetesCluster(ClusterABC):
         import signal
         
         def port_forward_worker():
+            process = None
             try:
                 service_name = f"{job_name}-svc"
                 
@@ -704,27 +706,83 @@ class KubernetesCluster(ClusterABC):
                 # 等待进程结束或停止信号
                 stop_event = forward_info.get('stop_event', threading.Event())
                 
+                # 读取一些初始输出来检查是否成功启动
+                import select
+                import time
+                
+                initial_output_read = False
+                
                 while not stop_event.is_set():
                     if process.poll() is not None:
-                        # 进程已结束
-                        stdout, stderr = process.communicate()
-                        if stderr:
-                            logger.error(f"Port forward error for {job_name}: {stderr}")
+                        # 进程已结束，读取所有输出并关闭文件句柄
+                        try:
+                            stdout, stderr = process.communicate(timeout=5)
+                            if stderr:
+                                logger.error(f"Port forward error for {job_name}: {stderr}")
+                                if "pod is not running" in stderr:
+                                    logger.warning(f"Pod for {job_name} is not running yet")
+                                elif "unable to forward port" in stderr:
+                                    logger.warning(f"Unable to forward port for {job_name}")
+                        except subprocess.TimeoutExpired:
+                            # 强制终止并读取输出
+                            process.kill()
+                            stdout, stderr = process.communicate()
+                            logger.warning(f"Port forward process killed for {job_name}")
                         break
+                    
+                    # 如果是第一次循环，尝试读取一些初始输出
+                    if not initial_output_read:
+                        time.sleep(2)  # 给进程一些启动时间
+                        initial_output_read = True
+                    
                     time.sleep(1)
                 
-                # 清理进程
-                if process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        
             except Exception as e:
                 logger.error(f"Port forward worker error for {job_name}: {e}")
+            finally:
+                # 确保进程被正确清理
+                if process is not None:
+                    try:
+                        if process.poll() is None:
+                            # 进程仍在运行，终止它
+                            process.terminate()
+                            try:
+                                # 等待进程结束并读取输出以关闭文件句柄
+                                stdout, stderr = process.communicate(timeout=5)
+                            except subprocess.TimeoutExpired:
+                                # 如果等待超时，强制杀死进程
+                                process.kill()
+                                stdout, stderr = process.communicate()
+                    except Exception as cleanup_error:
+                        logger.warning(f"Error during process cleanup for {job_name}: {cleanup_error}")
         
         try:
+            # 在启动端口转发之前，先检查 Pod 状态
+            try:
+                pods = await aio.to_thread(
+                    self.core_v1.list_namespaced_pod,
+                    namespace=self.config.Kubernetes.NAMESPACE,
+                    label_selector=f"app={job_name}"
+                )
+                
+                if not pods.items:
+                    logger.warning(f"No pods found for job {job_name}")
+                    return False
+                
+                pod = pods.items[0]
+                if pod.status.phase != "Running":
+                    logger.warning(f"Pod {pod.metadata.name} is not running (phase: {pod.status.phase})")
+                    # 仍然尝试创建端口转发，但预期会失败
+                else:
+                    # 检查容器是否就绪
+                    if pod.status.container_statuses:
+                        ready_containers = [cs for cs in pod.status.container_statuses if cs.ready]
+                        if not ready_containers:
+                            logger.warning(f"Pod {pod.metadata.name} is running but no containers are ready")
+                    
+            except Exception as e:
+                logger.warning(f"Failed to check pod status before port forward: {e}")
+            
             # 创建停止事件
             stop_event = threading.Event()
             
@@ -742,17 +800,16 @@ class KubernetesCluster(ClusterABC):
                 'process': None  # 将在线程中设置
             }
             
-            # 等待端口转发建立（检查端口是否可用）
-            for i in range(10):  # 最多等待 10 秒
+            # 等待端口转发建立，但时间更短
+            for i in range(5):  # 最多等待 5 秒
                 await aio.sleep(1)
                 if await self._test_local_port(local_port):
                     logger.info(f"Port forward established for {job_name} on localhost:{local_port}")
                     return True
             
-            # 如果 10 秒后仍不可用，清理并返回失败
-            await self.stop_port_forward(job_name)
-            logger.error(f"Port forward failed to establish for {job_name}")
-            return False
+            # 如果 5 秒后仍不可用，记录警告但不清理（可能 Pod 还在启动）
+            logger.warning(f"Port forward not ready yet for {job_name} after 5s")
+            return True  # 返回 True，让调用者知道端口转发已启动，即使还不可用
             
         except Exception as e:
             logger.error(f"Failed to create port forward for {job_name}: {e}")
@@ -789,19 +846,37 @@ class KubernetesCluster(ClusterABC):
             if 'stop_event' in forward_info:
                 forward_info['stop_event'].set()
             
-            # 终止进程
+            # 终止进程并确保文件句柄被关闭
             if 'process' in forward_info and forward_info['process']:
                 process = forward_info['process']
-                if process.poll() is None:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
+                try:
+                    if process.poll() is None:
+                        # 进程仍在运行，终止它
+                        process.terminate()
+                        try:
+                            # 等待进程结束并读取输出以关闭文件句柄
+                            stdout, stderr = process.communicate(timeout=5)
+                            logger.debug(f"Port forward process terminated gracefully for {job_name}")
+                        except subprocess.TimeoutExpired:
+                            # 如果等待超时，强制杀死进程
+                            process.kill()
+                            stdout, stderr = process.communicate()
+                            logger.warning(f"Port forward process killed for {job_name}")
+                    else:
+                        # 进程已经结束，但仍需要读取输出以关闭文件句柄
+                        try:
+                            stdout, stderr = process.communicate(timeout=1)
+                        except subprocess.TimeoutExpired:
+                            # 这种情况不太可能发生，但以防万一
+                            logger.warning(f"Failed to read output from terminated process for {job_name}")
+                except Exception as e:
+                    logger.warning(f"Error stopping port forward process for {job_name}: {e}")
             
             # 等待线程结束
             if 'thread' in forward_info and forward_info['thread'].is_alive():
                 forward_info['thread'].join(timeout=5)
+                if forward_info['thread'].is_alive():
+                    logger.warning(f"Port forward thread did not stop within timeout for {job_name}")
             
             del self._port_forwards[job_name]
             logger.info(f"Stopped port forward for {job_name}")
