@@ -122,6 +122,7 @@ class ClusterABC(ABC):
         """获取作业日志"""
         pass
 
+    @abstractmethod
     async def cleanup(self):
         """清理资源"""
         logger.info(f"Cluster {self.__class__.__name__} cleanup")
