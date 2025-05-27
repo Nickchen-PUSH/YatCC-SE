@@ -13,6 +13,7 @@ from config import CONFIG
 from datetime import datetime
 from typing import List, Optional, Dict
 from kubernetes.client.rest import ApiException
+from kubernetes.stream import portforward
 
 from . import (
     ClusterABC, JobParams, JobInfo,
@@ -474,8 +475,6 @@ class KubernetesCluster(ClusterABC):
         """创建 Deployment"""
         # 合并默认环境变量
         env_vars = {
-            "PASSWORD": "23336003",
-            "SUDO_PASSWORD": "23336003",
             **job_params.env
         }
         
