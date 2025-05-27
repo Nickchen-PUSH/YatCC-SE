@@ -245,7 +245,7 @@ class ClusterTestBase(AsyncTestCase):
             async def cleanup_jobs():
                 for job_id in self.created_jobs:
                     try:
-                        await self.cluster.delete_job(job_id)
+                        await self.cluster.cleanup(job_id)
                         LOGGER.debug(f"🧹 Cleaned up job: {job_id}")
                     except Exception as e:
                         LOGGER.warning(f"⚠️  Failed to cleanup job {job_id}: {e}")
@@ -310,9 +310,3 @@ class ClusterTestBase(AsyncTestCase):
         self.assert_job_info_valid(job_info)
         self.assertIn(8080, job_info.ports)
         self.assertIn("PASSWORD", job_info.env)
-    
-    def assert_user_isolation(self, job_info, expected_user_id: int):
-        """验证用户隔离"""
-        self.assertEqual(job_info.user_id, expected_user_id)
-        # 验证作业名称包含用户标识
-        self.assertIn(f"{expected_user_id}", job_info.name)
