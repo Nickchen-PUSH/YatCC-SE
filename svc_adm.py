@@ -239,4 +239,254 @@ async def create_student(body: RootModel[list[StudentCreate]]):
         "failed": failed,
     }
 
-#TODO 添加API
+# TODO
+
+# 删除单个学生API
+@WSGI.delete(
+    "/student/<id>",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {
+            "description": "删除学生成功",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "success": {"type": "boolean"},
+                            "message": {"type": "string"},
+                        },
+                    }
+                }
+            },
+        },
+        404: {"description": "学生不存在"},
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def delete_student(id: str):
+    """删除学生"""
+    pass
+
+
+# 批量删除学生API
+class StudentDelete(BaseModel):
+    id: str = Field(..., description="学生ID")
+
+
+@WSGI.delete(
+    "/student/batch_delete",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {
+            "description": "批量删除学生结果",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "success": {
+                                "type": "array",
+                                "items": {"type": "string"},
+                            },
+                            "failed": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "reason": {"type": "string"},
+                                    },
+                                },
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def batch_delete_student(body: RootModel[list[StudentDelete]]):
+    """批量删除学生"""
+    pass
+
+# ==================================================================================== #
+
+
+# 进入学生代码空间 api
+@WSGI.get(
+    "/student/<id>/codespace",
+    tags=[_TAG_STUDENT],
+    responses={
+        302: {"description": "容器正在运行，重定向到学生代码空间页面"},
+        303: {"description": "容器不在运行，重定向到代码空间管理页面"},
+        307: {"description": "容器正在运行，但代码空间未启动"},
+        404: {"description": "学生不存在"},
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def student_codespace(id: str):
+    """进入学生代码空间（重定向）"""
+    pass
+
+# 开启学生代码空间 api
+@WSGI.post(
+    "/student/<id>/codespace",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {"description": "启动操作成功"},
+        202: {"description": "代码空间正在或已经启动"},
+        404: {"description": "学生不存在"},
+        402: {"description": "代码空间配额已耗尽"},
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def student_codespace_start(id: str):
+    """启动学生代码空间，立即返回，不会等待代码空间启动完成"""
+    pass
+
+# 关闭学生代码空间 api
+@WSGI.delete(
+    "/student/<id>/codespace",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {"description": "停止操作成功"},
+        202: {"description": "代码空间不在运行"},
+        404: {"description": "学生不存在"},
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def student_codespace_stop(id: str):
+    """停止学生代码空间，立即返回，不会等待代码空间停止完成"""
+    pass
+
+# 获取学生代码空间信息 api
+@WSGI.get(
+    "/student/<id>/codespace/info",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {
+            "description": "成功返回学生代码空间信息",
+            "content": {
+                "application/json": {"schema": StudentDetail.model_json_schema()}
+            },
+        },
+        404: {"description": "学生不存在"},
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def student_codespace_info(id: str):
+    """获取学生代码空间信息"""
+    pass
+
+# 保持学生代码空间活跃 api
+@WSGI.post(
+    "/student/<id>/codespace/keepalive",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {"description": "保持活跃操作成功"},
+        202: {"description": "代码空间不在运行"},
+        404: {"description": "学生不存在"},
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def student_codespace_keepalive(id: str):
+    """保持学生代码空间活跃，防止超时"""
+    pass
+
+# 定义批量操作请求模型
+class CodespaceBatchOperation(BaseModel):
+    ids: list[str] = Field(..., description="学生ID列表")
+
+# 批量启动代码空间API
+@WSGI.post(
+    "/student/batch/codespace",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {
+            "description": "批量启动代码空间结果",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "success": {"type": "array", "items": {"type": "string"}},
+                            "failed": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "reason": {"type": "string"},
+                                    },
+                                },
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def batch_start_codespace(body: CodespaceBatchOperation):
+    """批量启动多个学生的代码空间"""
+    pass
+
+# 批量停止代码空间API
+@WSGI.delete(
+    "/student/batch/codespace",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {
+            "description": "批量停止代码空间结果",
+            "content": {
+                "application/json": {
+                    "schema": {
+                        "type": "object",
+                        "properties": {
+                            "success": {"type": "array", "items": {"type": "string"}},
+                            "failed": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "reason": {"type": "string"},
+                                    },
+                                },
+                            },
+                        },
+                    }
+                }
+            },
+        },
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def batch_stop_codespace(body: CodespaceBatchOperation):
+    """批量停止多个学生的代码空间"""
+    pass
+
+# 调整学生代码空间配额API
+class CodespaceQuota(BaseModel):
+    time_quota: int = Field(..., description="时间配额（秒）")
+    space_quota: int = Field(0, description="空间配额（字节）")
+
+@WSGI.put(
+    "/student/<id>/codespace/quota",
+    tags=[_TAG_STUDENT],
+    responses={
+        200: {"description": "配额调整成功"},
+        404: {"description": "学生不存在"},
+        **_CHECK_API_KEY_RESPONSES,
+    },
+)
+async def update_student_codespace_quota(id: str, body: CodespaceQuota):
+    """调整学生代码空间配额"""
+    pass
+
+# ==================================================================================== #
+#wsgi
+#main

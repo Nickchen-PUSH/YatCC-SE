@@ -246,9 +246,13 @@ class TABLE:
     @classmethod
     async def reset_password(cls, sid: str, new_password: str) -> None:
         """重置学生密码"""
-        student = await cls.read(sid)
-        student.reset_password(new_password)
-        await cls.write(student)
+        try:
+            student = await cls.read(sid)
+            student.reset_password(new_password)
+            await cls.write(student)
+        except StudentNotFoundError:
+            LOGGERR.warning(f"尝试重置不存在的学生 {sid!r} 的密码")
+            raise
 
     @classmethod
     async def check_password(cls, sid: str, password: str) -> bool:
