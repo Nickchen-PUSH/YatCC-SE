@@ -9,7 +9,6 @@ import socket
 import urllib.request
 import urllib.error
 from urllib.parse import urlparse
-from cluster import JobInfo, ClusterError, JobNotFoundError
 from base.logger import logger
 from . import ClusterTestBase, RUNNER, get_kubernetes_cluster, ensure_kubernetes_cluster
 
@@ -70,7 +69,6 @@ class KubernetesClusterTest(ClusterTestBase):
             user_id = 2001
             job_params = self.create_code_server_params(
                 user_id=user_id,
-                workspace_name="test-workspace",
                 memory_limit="512Mi",
                 cpu_limit="500m"
             )

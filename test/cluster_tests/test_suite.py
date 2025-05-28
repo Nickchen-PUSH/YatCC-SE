@@ -109,7 +109,6 @@ def main():
         epilog="""
 Examples:
   python3 test/cluster/test_suite.py                    # Run all tests
-  python3 test/cluster/test_suite.py -m factory         # Run factory tests  
   python3 test/cluster/test_suite.py -m kubernetes      # Run kubernetes tests
   python3 test/cluster/test_suite.py -p user            # Filter by pattern
   python3 test/cluster/test_suite.py -v 1               # Lower verbosity
