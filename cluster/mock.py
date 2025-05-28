@@ -21,6 +21,41 @@ class MockCluster(ClusterABC):
         super().__init__(config)
         self._jobs: Dict[str, JobInfo] = {}
 
+    async def create_job(self, job_params):
+        """创建模拟的 code-server 作业"""
+        
+        await self.ensure_initialized()
+        
+        # 验证必需参数
+        if not job_params.user_id:
+            raise ValueError("user_id is required")
+        
+        # 生成作业ID
+        job_id = f"mock-codeserver-{job_params.user_id}"
+        
+        # 创建作业信息
+        job_info = JobInfo(
+            id=job_id,
+            name=job_params.name,
+            image=job_params.image,
+            ports=job_params.ports,
+            env=job_params.env,
+            status=JobInfo.Status.PENDING,
+            created_at=datetime.now().isoformat(),
+            namespace="default",
+            service_url=f"http://mock-service-{job_id}:8080",
+            user_id=job_params.user_id,
+        )
+        
+        # 存储作业
+        self._jobs[job_id] = job_info
+        
+        # 模拟异步启动
+        aio.create_task(self._simulate_job_lifecycle(job_id))
+        
+        logger.info(f"Mock code-server job submitted: {job_id}")
+        return job_info
+
     async def submit_job(self, job_params: JobParams) -> JobInfo:
         """提交模拟的 code-server 作业"""
         await self.ensure_initialized()
@@ -30,7 +65,7 @@ class MockCluster(ClusterABC):
             raise ValueError("user_id is required")
         
         # 生成作业ID
-        job_id = f"mock-codeserver-{job_params.user_id}-{uuid.uuid4().hex[:6]}"
+        job_id = f"mock-codeserver-{job_params.user_id}"
         
         # 创建作业信息
         job_info = JobInfo(

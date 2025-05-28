@@ -9,16 +9,13 @@ import logging
 import threading
 import socket
 import subprocess
-import time
 from config import CONFIG
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from kubernetes import client, config
+from typing import List, Optional, Dict
 from kubernetes.client.rest import ApiException
-from kubernetes.stream import portforward
 
 from . import (
-    ClusterABC, JobParams, JobInfo, ClusterConfig,
+    ClusterABC, JobParams, JobInfo,
     ClusterError, JobNotFoundError
 )
 
@@ -94,6 +91,16 @@ class KubernetesCluster(ClusterABC):
     def core_v1(self):
         """获取 CoreV1Api 客户端"""
         return self._core_v1
+
+    async def create_job(self, job_params):
+        """创建作业"""
+        await self.ensure_initialized()
+        
+        # 验证必需参数
+        if not job_params.user_id:
+            raise ValueError("user_id is required")
+        
+        return await self._create_new_deployment(job_params)        
 
     async def submit_job(self, job_params: JobParams) -> JobInfo:
         """提交 code-server 作业到 Kubernetes"""
@@ -188,14 +195,6 @@ class KubernetesCluster(ClusterABC):
                 await self._unsuspend_deployment(job_id)
                 logger.info(f"Resumed suspended deployment: {job_id}")
                 
-                # 等待一下，然后重新读取 deployment 以获取最新状态
-                await aio.sleep(2)
-                deployment = await aio.to_thread(
-                    self.apps_v1.read_namespaced_deployment,
-                    name=job_id,
-                    namespace=self.config.Kubernetes.NAMESPACE
-                )
-                
                 # 验证注解是否被移除
                 updated_annotations = deployment.metadata.annotations or {}
                 logger.info(f"After unsuspend, annotations: {updated_annotations}")
@@ -225,37 +224,6 @@ class KubernetesCluster(ClusterABC):
                 logger.warning(f"Deployment {job_id} not found, creating new one")
                 return await self._create_new_deployment(job_params)
             raise ClusterError(f"Failed to resume deployment: {e}")
-
-    async def _create_new_deployment(self, job_params: JobParams) -> JobInfo:
-        """创建新的 Deployment"""
-        # 生成唯一作业名称
-        job_name = self._generate_job_name(job_params)
-        
-        try:
-            # 创建 Deployment
-            await self._create_deployment(job_name, job_params)
-            
-            # 创建 Service
-            service_url = await self._create_service(job_name, job_params)
-            
-            return JobInfo(
-                id=job_name,
-                name=job_params.name,
-                image=job_params.image,
-                ports=job_params.ports,
-                env=job_params.env,
-                status=JobInfo.Status.RUNNING,
-                created_at=datetime.now().isoformat(),
-                namespace=self.config.Kubernetes.NAMESPACE,
-                service_url=service_url,
-                user_id=job_params.user_id,
-            )
-            
-        except Exception as e:
-            logger.error(f"Failed to submit job: {e}")
-            # 清理可能创建的资源
-            await self._cleanup_job_resources(job_name)
-            raise ClusterError(f"Failed to submit job: {e}")
 
     async def _unsuspend_deployment(self, job_id: str) -> None:
         """恢复被暂停的 Deployment"""
@@ -444,7 +412,7 @@ class KubernetesCluster(ClusterABC):
     def _generate_job_name(self, job_params: JobParams) -> str:
         """生成作业名称"""
         base_name = f"codeserver-{job_params.user_id}"
-        return f"{base_name}-{uuid.uuid4().hex[:6]}"
+        return base_name
 
     # async def _create_pvc(self, job_name: str, job_params: JobParams):
     #     """创建持久化存储卷"""
