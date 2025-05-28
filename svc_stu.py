@@ -6,8 +6,9 @@ from flask_openapi3 import Info, OpenAPI, Tag
 from pydantic import BaseModel, Field
 
 import core.student
-from config import CONFIG, RUNNER, ENVIRON
+from config import CONFIG, ENVIRON
 from base.logger import logger
+from base import RUNNER
 
 LOGGER = logger(__spec__, __file__)
 
@@ -133,16 +134,20 @@ class LoginBody(BaseModel):
             "content": {"text/plain": {}},
         },
         401: {"description": "密码错误"},
+        403: {"description": "学生记录未找到"},
     },
 )
 async def login(body: LoginBody) -> Response:
     """登录，返回 API-KEY"""
     from util import api_key_enc
 
-    if not await core.student.TABLE.check_password(body.sid, body.pwd):
-        return "invalid password", 401
+    try:
+        if not await core.student.TABLE.check_password(body.sid, body.pwd):
+            raise ErrorResponse(Response("UNAUTHORIZED: wrong password", status=401))
+    except core.student.StudentNotFoundError:
+        raise ErrorResponse(Response("student not found", status=403))
 
-    return api_key_enc(body.sid)
+    return api_key_enc(body.sid), 200
 
 
 # ==================================================================================== #
@@ -167,7 +172,7 @@ _TAG_USER = Tag(name="user", description="用户设置")
 )
 async def user_info():
     """获取用户信息"""
-    pass    #TODO
+    pass  # TODO
 
 
 @WSGI.put(
@@ -182,7 +187,7 @@ async def user_info():
 )
 async def user_update(body: core.student.UserInfo):
     """修改用户信息"""
-    pass    #TODO
+    pass  # TODO
 
 
 class UserResetPassword(BaseModel):
@@ -202,7 +207,7 @@ class UserResetPassword(BaseModel):
 )
 async def user_reset_password(body: UserResetPassword):
     """重置密码"""
-    pass    #TODO
+    pass  # TODO
 
 
 # ==================================================================================== #
@@ -222,7 +227,7 @@ _TAG_CODESPACE = Tag(name="codespace", description="代码空间")
 )
 async def codespace():
     """进入代码空间（重定向）"""
-    pass    #TODO
+    pass  # TODO
 
 
 @WSGI.post(
@@ -238,7 +243,7 @@ async def codespace():
 )
 async def codespace_start():
     """启动代码空间，立即返回，不会等待代码空间启动完成"""
-    pass    #TODO
+    pass  # TODO
 
 
 @WSGI.delete(
@@ -253,7 +258,7 @@ async def codespace_start():
 )
 async def codespace_stop():
     """停止代码空间，立即返回，不会等待代码空间停止完成"""
-    pass    #TODO
+    pass  # TODO
 
 
 class CodespaceInfo(BaseModel):
@@ -287,7 +292,7 @@ class CodespaceInfo(BaseModel):
 )
 async def codespace_info():
     """获取代码空间信息"""
-    pass    #TODO
+    pass  # TODO
 
 
 @WSGI.post(
@@ -302,7 +307,8 @@ async def codespace_info():
 )
 async def codespace_keepalive():
     """保持代码空间活跃，防止超时"""
-    pass    #TODO
+    pass  # TODO
+
 
 # ==================================================================================== #
 

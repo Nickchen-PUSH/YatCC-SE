@@ -3,7 +3,7 @@ import unittest
 import svc_stu
 from base.logger import logger
 from core import student
-from base import RUNNER
+from . import RUNNER
 
 LOGGER = logger(__spec__, __file__)
 WSGI: svc_stu.AsyncFlask

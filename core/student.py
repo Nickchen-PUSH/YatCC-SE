@@ -202,7 +202,6 @@ class TABLE:
             LOGGERR.warning(
                 f"Student directory {stu_path} already exists, skipping creation"
             )
-            return False
 
         ts = datetime.now().timestamp()
         stu.codespace.last_start = ts
