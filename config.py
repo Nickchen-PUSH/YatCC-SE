@@ -1,9 +1,12 @@
 import os
+import platform
 from pathlib import Path
 from types import ModuleType
 
 from base import PROJECT_DIR, Configuration, timetag
 
+REDIS_SVC_LINUX = "/usr/bin/redis-server"
+REDIS_SVC_MAC = "/opt/homebrew/bin/redis-server"
 # ==================================================================================== #
 
 class Environ(Configuration):
@@ -15,8 +18,14 @@ class Environ(Configuration):
 ENVIRON = Environ
 
 class Executable(Configuration):
-    redis_server = "/opt/homebrew/bin/redis-server"
-
+    # 根据不同的平台设置不同的可执行文件
+    system = platform.system().lower()
+    if system == "linux":
+        redis_server = REDIS_SVC_LINUX
+    elif system == "darwin":
+        redis_server = REDIS_SVC_MAC
+    else:
+        redis_server = REDIS_SVC_MAC
 
 ENVIRON.EXECUTABLE = Executable
 
