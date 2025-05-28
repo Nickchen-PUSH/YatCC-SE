@@ -970,7 +970,7 @@ class KubernetesCluster(ClusterABC):
             
         except ApiException as e:
             if e.status == 404:
-                raise JobNotFoundError(f"Job not found: {job_id}")
+                raise JobNotFoundError(f"Job not found: {job_name}")
             raise ClusterError(f"Failed to get job info: {e}")
     
     async def delete_job(self, user_id: int) -> List[str]:
