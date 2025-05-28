@@ -93,6 +93,11 @@ class ClusterABC(ABC):
             await self.initialize()
 
     @abstractmethod
+    async def create_job(self, job_params: JobParams) -> JobInfo:
+        """创建作业"""
+        pass
+
+    @abstractmethod
     async def submit_job(self, job_params: JobParams) -> JobInfo:
         """提交作业"""
         pass

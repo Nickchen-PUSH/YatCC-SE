@@ -13,7 +13,6 @@ from config import CONFIG
 from datetime import datetime
 from typing import List, Optional, Dict
 from kubernetes.client.rest import ApiException
-from kubernetes.stream import portforward
 
 from . import (
     ClusterABC, JobParams, JobInfo,
@@ -92,6 +91,16 @@ class KubernetesCluster(ClusterABC):
     def core_v1(self):
         """获取 CoreV1Api 客户端"""
         return self._core_v1
+
+    async def create_job(self, job_params):
+        """创建作业"""
+        await self.ensure_initialized()
+        
+        # 验证必需参数
+        if not job_params.user_id:
+            raise ValueError("user_id is required")
+        
+        return await self._create_new_deployment(job_params)        
 
     async def submit_job(self, job_params: JobParams) -> JobInfo:
         """提交 code-server 作业到 Kubernetes"""
@@ -442,7 +451,7 @@ class KubernetesCluster(ClusterABC):
     def _generate_job_name(self, job_params: JobParams) -> str:
         """生成作业名称"""
         base_name = f"codeserver-{job_params.user_id}"
-        return f"{base_name}-{uuid.uuid4().hex[:6]}"
+        return base_name
 
     # async def _create_pvc(self, job_name: str, job_params: JobParams):
     #     """创建持久化存储卷"""
