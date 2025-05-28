@@ -5,24 +5,21 @@ code-server 镜像的部署和管理。
 
 import asyncio as aio
 import uuid
-import logging
 import threading
 import socket
 import subprocess
-import time
+from base.logger import logger
 from config import CONFIG
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from kubernetes import client, config
+from typing import List, Optional, Dict
 from kubernetes.client.rest import ApiException
-from kubernetes.stream import portforward
 
 from . import (
-    ClusterABC, JobParams, JobInfo, ClusterConfig,
+    ClusterABC, JobParams, JobInfo,
     ClusterError, JobNotFoundError
 )
 
-logger = logging.getLogger(__name__)
+LOGGER = logger(__spec__, __file__)
 
 
 class KubernetesCluster(ClusterABC):
@@ -55,12 +52,12 @@ class KubernetesCluster(ClusterABC):
                 else:
                     # 尝试自动加载配置
                     k8s_config.load_kube_config()
-                logger.info("Loaded kubeconfig from file")
+                LOGGER.info("Loaded kubeconfig from file")
             except Exception:
                 try:
                     # 如果在集群内，尝试加载集群内配置
                     k8s_config.load_incluster_config()
-                    logger.info("Loaded in-cluster config")
+                    LOGGER.info("Loaded in-cluster config")
                 except Exception as e:
                     raise ClusterError(f"Failed to load Kubernetes config: {e}")
             
@@ -74,10 +71,10 @@ class KubernetesCluster(ClusterABC):
             await aio.to_thread(self._core_v1.list_namespace, timeout_seconds=10)
             
             self._is_initialized = True
-            logger.info("Kubernetes cluster initialized successfully")
+            LOGGER.info("Kubernetes cluster initialized successfully")
             
         except Exception as e:
-            logger.error(f"Failed to initialize Kubernetes cluster: {e}")
+            LOGGER.error(f"Failed to initialize Kubernetes cluster: {e}")
             raise ClusterError(f"Kubernetes initialization failed: {e}")
     
     async def ensure_initialized(self):
@@ -108,7 +105,7 @@ class KubernetesCluster(ClusterABC):
         if existing_job:
             return await self._resume_user_deployment(existing_job, job_params)
         else:
-            logger.info("No existing deployment found for user {job_params.user_id}, creating a new one.")
+            LOGGER.info("No existing deployment found for user {job_params.user_id}, creating a new one.")
             return await self._create_new_deployment(job_params)
 
     async def _find_user_deployment(self, job_params: JobParams) -> Optional[JobInfo]:
@@ -123,12 +120,12 @@ class KubernetesCluster(ClusterABC):
             if deployments.items:
                 deployment = deployments.items[0]
                 job_name = deployment.metadata.name
-                logger.info(f"Found existing deployment for user {job_params.user_id}: {job_name}")
+                LOGGER.info(f"Found existing deployment for user {job_params.user_id}: {job_name}")
                 return job_name
 
             return None
         except ApiException as e:
-            logger.warning(f"Error finding user deployment: {e}")
+            LOGGER.warning(f"Error finding user deployment: {e}")
             return None
         
     async def _create_new_deployment(self, job_params: JobParams) -> JobInfo:
@@ -160,7 +157,7 @@ class KubernetesCluster(ClusterABC):
             )
             
         except Exception as e:
-            logger.error(f"Failed to submit job: {e}")
+            LOGGER.error(f"Failed to submit job: {e}")
             # 清理可能创建的资源
             await self._cleanup_job_resources(job_name)
             raise ClusterError(f"Failed to submit job: {e}")
@@ -178,15 +175,15 @@ class KubernetesCluster(ClusterABC):
             annotations = deployment.metadata.annotations or {}
             is_suspended = annotations.get("yatcc-se/suspended") == "true"
             
-            logger.info(f"Checking deployment {job_id} suspension status:")
-            logger.info(f"  - Annotations: {annotations}")
-            logger.info(f"  - Is suspended: {is_suspended}")
+            LOGGER.info(f"Checking deployment {job_id} suspension status:")
+            LOGGER.info(f"  - Annotations: {annotations}")
+            LOGGER.info(f"  - Is suspended: {is_suspended}")
             
             if is_suspended:
                 # 恢复 Deployment
-                logger.info(f"Unsuspending deployment: {job_id}")
+                LOGGER.info(f"Unsuspending deployment: {job_id}")
                 await self._unsuspend_deployment(job_id)
-                logger.info(f"Resumed suspended deployment: {job_id}")
+                LOGGER.info(f"Resumed suspended deployment: {job_id}")
                 
                 # 等待一下，然后重新读取 deployment 以获取最新状态
                 await aio.sleep(2)
@@ -198,10 +195,10 @@ class KubernetesCluster(ClusterABC):
                 
                 # 验证注解是否被移除
                 updated_annotations = deployment.metadata.annotations or {}
-                logger.info(f"After unsuspend, annotations: {updated_annotations}")
+                LOGGER.info(f"After unsuspend, annotations: {updated_annotations}")
             else:
                 # Deployment 已经在运行
-                logger.info(f"Deployment {job_id} is already running")
+                LOGGER.info(f"Deployment {job_id} is already running")
             
             # 🎯 更新环境变量和配置（如果有变化）
             await self._update_deployment_if_needed(job_id, job_params)
@@ -222,7 +219,7 @@ class KubernetesCluster(ClusterABC):
         except ApiException as e:
             if e.status == 404:
                 # Deployment 不存在了，创建新的
-                logger.warning(f"Deployment {job_id} not found, creating new one")
+                LOGGER.warning(f"Deployment {job_id} not found, creating new one")
                 return await self._create_new_deployment(job_params)
             raise ClusterError(f"Failed to resume deployment: {e}")
 
@@ -252,7 +249,7 @@ class KubernetesCluster(ClusterABC):
             )
             
         except Exception as e:
-            logger.error(f"Failed to submit job: {e}")
+            LOGGER.error(f"Failed to submit job: {e}")
             # 清理可能创建的资源
             await self._cleanup_job_resources(job_name)
             raise ClusterError(f"Failed to submit job: {e}")
@@ -262,7 +259,7 @@ class KubernetesCluster(ClusterABC):
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                logger.info(f"Unsuspending deployment {job_id} (attempt {attempt + 1})")
+                LOGGER.info(f"Unsuspending deployment {job_id} (attempt {attempt + 1})")
                 
                 # 重新读取最新的 deployment
                 deployment = await aio.to_thread(
@@ -272,19 +269,19 @@ class KubernetesCluster(ClusterABC):
                 )
                 
                 annotations = deployment.metadata.annotations or {}
-                logger.info(f"Current annotations before unsuspend: {annotations}")
+                LOGGER.info(f"Current annotations before unsuspend: {annotations}")
                 
                 # 修复：正确获取原始副本数
                 original_replicas_str = annotations.get("yatcc-se/original-replicas", "1")
                 try:
                     original_replicas = int(original_replicas_str)
                 except ValueError:
-                    logger.warning(f"Invalid original-replicas value: {original_replicas_str}, using default 1")
+                    LOGGER.warning(f"Invalid original-replicas value: {original_replicas_str}, using default 1")
                     original_replicas = 1
                 
                 # 恢复副本数
                 deployment.spec.replicas = original_replicas
-                logger.info(f"Setting replicas to: {original_replicas}")
+                LOGGER.info(f"Setting replicas to: {original_replicas}")
                 
                 # 🎯 关键修复：确保注解被完全删除
                 # 创建新的注解字典，排除暂停相关的注解
@@ -296,8 +293,8 @@ class KubernetesCluster(ClusterABC):
                 # 设置新的注解字典
                 deployment.metadata.annotations = new_annotations
                 
-                logger.info(f"New annotations after removal: {new_annotations}")
-                logger.info(f"Removed annotations: yatcc-se/suspended, yatcc-se/original-replicas")
+                LOGGER.info(f"New annotations after removal: {new_annotations}")
+                LOGGER.info(f"Removed annotations: yatcc-se/suspended, yatcc-se/original-replicas")
                 
                 # 执行更新
                 updated_deployment = await aio.to_thread(
@@ -307,24 +304,24 @@ class KubernetesCluster(ClusterABC):
                     body=deployment
                 )
                 
-                logger.info(f"Successfully unsuspended deployment: {job_id}")
-                logger.info(f"Final replicas: {updated_deployment.spec.replicas}")
-                logger.info(f"Final annotations: {updated_deployment.metadata.annotations}")
+                LOGGER.info(f"Successfully unsuspended deployment: {job_id}")
+                LOGGER.info(f"Final replicas: {updated_deployment.spec.replicas}")
+                LOGGER.info(f"Final annotations: {updated_deployment.metadata.annotations}")
                 return
                 
             except ApiException as e:
                 if e.status == 409 and attempt < max_retries - 1:
                     # 版本冲突，等待一下再重试
-                    logger.warning(f"Deployment {job_id} version conflict, retrying... (attempt {attempt + 1})")
+                    LOGGER.warning(f"Deployment {job_id} version conflict, retrying... (attempt {attempt + 1})")
                     await aio.sleep(0.5 * (attempt + 1))  # 递增等待时间
                     continue
                 elif e.status == 404:
-                    logger.warning(f"Deployment {job_id} not found during unsuspend")
+                    LOGGER.warning(f"Deployment {job_id} not found during unsuspend")
                     return
                 else:
                     raise ClusterError(f"Failed to unsuspend deployment: {e}")
             except Exception as e:
-                logger.error(f"Unexpected error unsuspending {job_id}: {e}")
+                LOGGER.error(f"Unexpected error unsuspending {job_id}: {e}")
                 raise ClusterError(f"Unexpected error unsuspending deployment: {e}")
     
 
@@ -375,7 +372,7 @@ class KubernetesCluster(ClusterABC):
                         body=deployment
                     )
                     
-                    logger.info(f"Updated deployment configuration: {job_id}")
+                    LOGGER.info(f"Updated deployment configuration: {job_id}")
                     return True
                 
                 return False
@@ -383,17 +380,17 @@ class KubernetesCluster(ClusterABC):
             except ApiException as e:
                 if e.status == 409 and attempt < max_retries - 1:
                     # 版本冲突，等待一下再重试
-                    logger.warning(f"Deployment {job_id} update conflict, retrying... (attempt {attempt + 1})")
+                    LOGGER.warning(f"Deployment {job_id} update conflict, retrying... (attempt {attempt + 1})")
                     await aio.sleep(0.5 * (attempt + 1))
                     continue
                 elif e.status == 404:
-                    logger.warning(f"Deployment {job_id} not found during update")
+                    LOGGER.warning(f"Deployment {job_id} not found during update")
                     return False
                 else:
-                    logger.warning(f"Failed to update deployment {job_id}: {e}")
+                    LOGGER.warning(f"Failed to update deployment {job_id}: {e}")
                     return False
         
-        logger.warning(f"Failed to update deployment {job_id} after {max_retries} attempts")
+        LOGGER.warning(f"Failed to update deployment {job_id} after {max_retries} attempts")
         return False
 
     async def _ensure_service_exists(self, job_id: str, job_params: JobParams) -> str:
@@ -411,7 +408,7 @@ class KubernetesCluster(ClusterABC):
         except ApiException as e:
             if e.status == 404:
                 # Service 不存在，创建它
-                logger.info(f"Service not found for {job_id}, creating...")
+                LOGGER.info(f"Service not found for {job_id}, creating...")
                 return await self._create_service(job_id, job_params)
             raise ClusterError(f"Failed to check service: {e}")
 
@@ -471,7 +468,7 @@ class KubernetesCluster(ClusterABC):
         #     namespace=self.config.Kubernetes.NAMESPACE,
         #     body=pvc_spec
         # )
-        # logger.info(f"Created PVC: {job_name}-pvc")
+        # LOGGER.info(f"Created PVC: {job_name}-pvc")
 
     async def _create_deployment(self, job_name: str, job_params: JobParams):
         """创建 Deployment"""
@@ -586,7 +583,7 @@ class KubernetesCluster(ClusterABC):
             namespace=self.config.Kubernetes.NAMESPACE,
             body=deployment_spec
         )
-        logger.info(f"Created Deployment: {job_name}")
+        LOGGER.info(f"Created Deployment: {job_name}")
 
     async def _create_service(self, job_name: str, job_params: JobParams) -> str:
         """创建 Service，返回内部集群 URL"""
@@ -621,7 +618,7 @@ class KubernetesCluster(ClusterABC):
 
         # 返回内部集群 URL
         service_url = f"http://{job_name}-svc.{self.config.Kubernetes.NAMESPACE}.svc.cluster.local:{self.config.CodeServer.PORT}"
-        logger.info(f"Created Service: {job_name}-svc, Internal URL: {service_url}")
+        LOGGER.info(f"Created Service: {job_name}-svc, Internal URL: {service_url}")
         return service_url
 
     async def get_service_url(self, job_name: str) -> str:
@@ -641,7 +638,7 @@ class KubernetesCluster(ClusterABC):
                 forward_info = self._port_forwards[job_name]
                 if forward_info['thread'].is_alive():
                     local_url = f"http://localhost:{forward_info['local_port']}"
-                    logger.debug(f"Using existing port forward for {job_name}: {local_url}")
+                    LOGGER.debug(f"Using existing port forward for {job_name}: {local_url}")
                     return local_url
                 else:
                     # 清理无效的端口转发
@@ -660,7 +657,7 @@ class KubernetesCluster(ClusterABC):
             
             if success:
                 local_url = f"http://localhost:{local_port}"
-                logger.info(f"Created port forward for {job_name}: {local_url} -> {target_port}")
+                LOGGER.info(f"Created port forward for {job_name}: {local_url} -> {target_port}")
                 return local_url
             else:
                 raise ClusterError(f"Failed to create port forward for {job_name}")
@@ -688,7 +685,7 @@ class KubernetesCluster(ClusterABC):
                     '-n', self.config.Kubernetes.NAMESPACE
                 ]
                 
-                logger.info(f"Starting port forward: {' '.join(cmd)}")
+                LOGGER.info(f"Starting port forward: {' '.join(cmd)}")
                 
                 # 启动端口转发进程
                 process = subprocess.Popen(
@@ -718,16 +715,16 @@ class KubernetesCluster(ClusterABC):
                         try:
                             stdout, stderr = process.communicate(timeout=5)
                             if stderr:
-                                logger.error(f"Port forward error for {job_name}: {stderr}")
+                                LOGGER.error(f"Port forward error for {job_name}: {stderr}")
                                 if "pod is not running" in stderr:
-                                    logger.warning(f"Pod for {job_name} is not running yet")
+                                    LOGGER.warning(f"Pod for {job_name} is not running yet")
                                 elif "unable to forward port" in stderr:
-                                    logger.warning(f"Unable to forward port for {job_name}")
+                                    LOGGER.warning(f"Unable to forward port for {job_name}")
                         except subprocess.TimeoutExpired:
                             # 强制终止并读取输出
                             process.kill()
                             stdout, stderr = process.communicate()
-                            logger.warning(f"Port forward process killed for {job_name}")
+                            LOGGER.warning(f"Port forward process killed for {job_name}")
                         break
                     
                     # 如果是第一次循环，尝试读取一些初始输出
@@ -738,7 +735,7 @@ class KubernetesCluster(ClusterABC):
                     time.sleep(1)
                 
             except Exception as e:
-                logger.error(f"Port forward worker error for {job_name}: {e}")
+                LOGGER.error(f"Port forward worker error for {job_name}: {e}")
             finally:
                 # 确保进程被正确清理
                 if process is not None:
@@ -754,7 +751,7 @@ class KubernetesCluster(ClusterABC):
                                 process.kill()
                                 stdout, stderr = process.communicate()
                     except Exception as cleanup_error:
-                        logger.warning(f"Error during process cleanup for {job_name}: {cleanup_error}")
+                        LOGGER.warning(f"Error during process cleanup for {job_name}: {cleanup_error}")
         
         try:
             # 在启动端口转发之前，先检查 Pod 状态
@@ -766,22 +763,22 @@ class KubernetesCluster(ClusterABC):
                 )
                 
                 if not pods.items:
-                    logger.warning(f"No pods found for job {job_name}")
+                    LOGGER.warning(f"No pods found for job {job_name}")
                     return False
                 
                 pod = pods.items[0]
                 if pod.status.phase != "Running":
-                    logger.warning(f"Pod {pod.metadata.name} is not running (phase: {pod.status.phase})")
+                    LOGGER.warning(f"Pod {pod.metadata.name} is not running (phase: {pod.status.phase})")
                     # 仍然尝试创建端口转发，但预期会失败
                 else:
                     # 检查容器是否就绪
                     if pod.status.container_statuses:
                         ready_containers = [cs for cs in pod.status.container_statuses if cs.ready]
                         if not ready_containers:
-                            logger.warning(f"Pod {pod.metadata.name} is running but no containers are ready")
+                            LOGGER.warning(f"Pod {pod.metadata.name} is running but no containers are ready")
                     
             except Exception as e:
-                logger.warning(f"Failed to check pod status before port forward: {e}")
+                LOGGER.warning(f"Failed to check pod status before port forward: {e}")
             
             # 创建停止事件
             stop_event = threading.Event()
@@ -804,15 +801,15 @@ class KubernetesCluster(ClusterABC):
             for i in range(5):  # 最多等待 5 秒
                 await aio.sleep(1)
                 if await self._test_local_port(local_port):
-                    logger.info(f"Port forward established for {job_name} on localhost:{local_port}")
+                    LOGGER.info(f"Port forward established for {job_name} on localhost:{local_port}")
                     return True
             
             # 如果 5 秒后仍不可用，记录警告但不清理（可能 Pod 还在启动）
-            logger.warning(f"Port forward not ready yet for {job_name} after 5s")
+            LOGGER.warning(f"Port forward not ready yet for {job_name} after 5s")
             return True  # 返回 True，让调用者知道端口转发已启动，即使还不可用
             
         except Exception as e:
-            logger.error(f"Failed to create port forward for {job_name}: {e}")
+            LOGGER.error(f"Failed to create port forward for {job_name}: {e}")
             return False
 
     async def _test_local_port(self, port: int) -> bool:
@@ -856,30 +853,30 @@ class KubernetesCluster(ClusterABC):
                         try:
                             # 等待进程结束并读取输出以关闭文件句柄
                             stdout, stderr = process.communicate(timeout=5)
-                            logger.debug(f"Port forward process terminated gracefully for {job_name}")
+                            LOGGER.debug(f"Port forward process terminated gracefully for {job_name}")
                         except subprocess.TimeoutExpired:
                             # 如果等待超时，强制杀死进程
                             process.kill()
                             stdout, stderr = process.communicate()
-                            logger.warning(f"Port forward process killed for {job_name}")
+                            LOGGER.warning(f"Port forward process killed for {job_name}")
                     else:
                         # 进程已经结束，但仍需要读取输出以关闭文件句柄
                         try:
                             stdout, stderr = process.communicate(timeout=1)
                         except subprocess.TimeoutExpired:
                             # 这种情况不太可能发生，但以防万一
-                            logger.warning(f"Failed to read output from terminated process for {job_name}")
+                            LOGGER.warning(f"Failed to read output from terminated process for {job_name}")
                 except Exception as e:
-                    logger.warning(f"Error stopping port forward process for {job_name}: {e}")
+                    LOGGER.warning(f"Error stopping port forward process for {job_name}: {e}")
             
             # 等待线程结束
             if 'thread' in forward_info and forward_info['thread'].is_alive():
                 forward_info['thread'].join(timeout=5)
                 if forward_info['thread'].is_alive():
-                    logger.warning(f"Port forward thread did not stop within timeout for {job_name}")
+                    LOGGER.warning(f"Port forward thread did not stop within timeout for {job_name}")
             
             del self._port_forwards[job_name]
-            logger.info(f"Stopped port forward for {job_name}")
+            LOGGER.info(f"Stopped port forward for {job_name}")
 
     def _get_available_local_port(self) -> int:
         """获取可用的本地端口"""
@@ -1001,11 +998,11 @@ class KubernetesCluster(ClusterABC):
                 success = await self._suspend_deployment_with_retry(job_id, current_replicas)
                 if success:
                     suspended_jobs.append(job_id)
-                    logger.info(f"Suspended deployment: {job_id} (user: {user_id})")
+                    LOGGER.info(f"Suspended deployment: {job_id} (user: {user_id})")
                 else:
-                    logger.warning(f"Failed to suspend deployment: {job_id}")
+                    LOGGER.warning(f"Failed to suspend deployment: {job_id}")
             
-            logger.info(f"Suspended {len(suspended_jobs)} deployments for user {user_id}")
+            LOGGER.info(f"Suspended {len(suspended_jobs)} deployments for user {user_id}")
             return suspended_jobs
             
         except ApiException as e:
@@ -1046,17 +1043,17 @@ class KubernetesCluster(ClusterABC):
             except ApiException as e:
                 if e.status == 409 and attempt < max_retries - 1:
                     # 版本冲突，等待一下再重试
-                    logger.warning(f"Deployment {job_id} suspend conflict, retrying... (attempt {attempt + 1})")
+                    LOGGER.warning(f"Deployment {job_id} suspend conflict, retrying... (attempt {attempt + 1})")
                     await aio.sleep(0.5 * (attempt + 1))
                     continue
                 elif e.status == 404:
-                    logger.warning(f"Deployment {job_id} not found during suspend")
+                    LOGGER.warning(f"Deployment {job_id} not found during suspend")
                     return False
                 else:
-                    logger.error(f"Failed to suspend deployment {job_id}: {e}")
+                    LOGGER.error(f"Failed to suspend deployment {job_id}: {e}")
                     return False
         
-        logger.error(f"Failed to suspend deployment {job_id} after {max_retries} attempts")
+        LOGGER.error(f"Failed to suspend deployment {job_id} after {max_retries} attempts")
         return False
 
     async def cleanup(self, job_name: str) -> None:
@@ -1067,7 +1064,7 @@ class KubernetesCluster(ClusterABC):
             await self.stop_port_forward(job_name)
 
             await self._cleanup_job_resources(job_name)
-            logger.info(f"Job deleted: {job_name}")
+            LOGGER.info(f"Job deleted: {job_name}")
         except ApiException as e:
             if e.status != 404:
                 raise ClusterError(f"Failed to delete job: {e}")
@@ -1083,10 +1080,10 @@ class KubernetesCluster(ClusterABC):
                 name=job_name,
                 namespace=namespace
             )
-            logger.info(f"Deleted Deployment: {job_name}")
+            LOGGER.info(f"Deleted Deployment: {job_name}")
         except ApiException as e:
             if e.status != 404:
-                logger.warning(f"Failed to delete deployment {job_name}: {e}")
+                LOGGER.warning(f"Failed to delete deployment {job_name}: {e}")
         
         # 删除 Service
         try:
@@ -1095,10 +1092,10 @@ class KubernetesCluster(ClusterABC):
                 name=f"{job_name}-svc",
                 namespace=namespace
             )
-            logger.info(f"Deleted Service: {job_name}-svc")
+            LOGGER.info(f"Deleted Service: {job_name}-svc")
         except ApiException as e:
             if e.status != 404:
-                logger.warning(f"Failed to delete service {job_name}-svc: {e}")
+                LOGGER.warning(f"Failed to delete service {job_name}-svc: {e}")
         
         # 删除 PVC
         # try:
@@ -1107,10 +1104,10 @@ class KubernetesCluster(ClusterABC):
         #         name=f"{job_name}-pvc",
         #         namespace=namespace
         #     )
-        #     logger.info(f"Deleted PVC: {job_name}-pvc")
+        #     LOGGER.info(f"Deleted PVC: {job_name}-pvc")
         # except ApiException as e:
         #     if e.status != 404:
-        #         logger.warning(f"Failed to delete PVC {job_name}-pvc: {e}")
+        #         LOGGER.warning(f"Failed to delete PVC {job_name}-pvc: {e}")
 
     async def list_jobs(self) -> List[JobInfo]:
         """列出所有作业"""
