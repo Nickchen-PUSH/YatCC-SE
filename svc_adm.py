@@ -185,7 +185,7 @@ class StudentCreate(StudentBrief):
 
 
 @WSGI.post(
-    "/student/batch_create",
+    "/student",
     tags=[_TAG_STUDENT],
     responses={
         200: {
@@ -247,7 +247,7 @@ class StudentDelete(BaseModel):
 
 
 @WSGI.delete(
-    "/student/batch_delete",
+    "/student",
     tags=[_TAG_STUDENT],
     responses={
         200: {
@@ -288,7 +288,7 @@ async def batch_delete_student(body: RootModel[list[StudentDelete]]):
 
 # 进入学生代码空间 api
 @WSGI.get(
-    "/student/<id>/codespace",
+    "/student/codespace",
     tags=[_TAG_STUDENT],
     responses={
         302: {"description": "容器正在运行，重定向到学生代码空间页面"},
@@ -304,7 +304,7 @@ async def student_codespace(id: str):
 
 # 开启学生代码空间 api
 @WSGI.post(
-    "/student/<id>/codespace",
+    "/student/codespace",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "启动操作成功"},
@@ -320,7 +320,7 @@ async def student_codespace_start(id: str):
 
 # 关闭学生代码空间 api
 @WSGI.delete(
-    "/student/<id>/codespace",
+    "/student/codespace",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "停止操作成功"},
@@ -334,29 +334,15 @@ async def student_codespace_stop(id: str):
     pass
 
 
-class CodespaceInfo(BaseModel):
-    access_url: str | bool = Field(
-        ...,
-        description="访问链接，true 表示正在启动，false 表示不在运行",
-    )
-
-    last_start: float = Field(..., description="上次启动时间，POSIX 时间戳")
-    last_stop: float = Field(..., description="上次停止时间，POSIX 时间戳")
-
-    time_quota: float = Field(..., description="时间配额，单位秒")
-    time_used: float = Field(..., description="已用时间，单位秒")
-    space_quota: int = Field(..., description="空间配额，单位字节")
-    space_used: int = Field(..., description="已用空间，单位字节")
-
 # 获取学生代码空间信息 api
 @WSGI.get(
-    "/student/<id>/codespace/info",
+    "/student/info",
     tags=[_TAG_STUDENT],
     responses={
         200: {
             "description": "成功返回学生代码空间信息",
             "content": {
-                "application/json": {"schema": CodespaceInfo.model_json_schema()}
+                "application/json": {"schema": student.CodespaceInfo.model_json_schema()}
             },
         },
         404: {"description": "学生不存在"},
@@ -369,7 +355,7 @@ async def student_codespace_info(id: str):
 
 # 保持学生代码空间活跃 api
 @WSGI.post(
-    "/student/<id>/codespace/keepalive",
+    "/student/keepalive",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "保持活跃操作成功"},
@@ -388,7 +374,7 @@ class CodespaceBatchOperation(BaseModel):
 
 # 批量启动代码空间API
 @WSGI.post(
-    "/student/batch/codespace",
+    "/student/codespace",
     tags=[_TAG_STUDENT],
     responses={
         200: {
@@ -423,7 +409,7 @@ async def batch_start_codespace(body: CodespaceBatchOperation):
 
 # 批量停止代码空间API
 @WSGI.delete(
-    "/student/batch/codespace",
+    "/student/codespace",
     tags=[_TAG_STUDENT],
     responses={
         200: {
@@ -462,7 +448,7 @@ class CodespaceQuota(BaseModel):
     space_quota: int = Field(0, description="空间配额（字节）")
 
 @WSGI.put(
-    "/student/<id>/codespace/quota",
+    "/student/codespace/quota",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "配额调整成功"},
