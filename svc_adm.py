@@ -241,34 +241,6 @@ async def create_student(body: RootModel[list[StudentCreate]]):
 
 # TODO
 
-# 删除单个学生API
-@WSGI.delete(
-    "/student/<id>",
-    tags=[_TAG_STUDENT],
-    responses={
-        200: {
-            "description": "删除学生成功",
-            "content": {
-                "application/json": {
-                    "schema": {
-                        "type": "object",
-                        "properties": {
-                            "success": {"type": "boolean"},
-                            "message": {"type": "string"},
-                        },
-                    }
-                }
-            },
-        },
-        404: {"description": "学生不存在"},
-        **_CHECK_API_KEY_RESPONSES,
-    },
-)
-async def delete_student(id: str):
-    """删除学生"""
-    pass
-
-
 # 批量删除学生API
 class StudentDelete(BaseModel):
     id: str = Field(..., description="学生ID")
@@ -361,6 +333,21 @@ async def student_codespace_stop(id: str):
     """停止学生代码空间，立即返回，不会等待代码空间停止完成"""
     pass
 
+
+class CodespaceInfo(BaseModel):
+    access_url: str | bool = Field(
+        ...,
+        description="访问链接，true 表示正在启动，false 表示不在运行",
+    )
+
+    last_start: float = Field(..., description="上次启动时间，POSIX 时间戳")
+    last_stop: float = Field(..., description="上次停止时间，POSIX 时间戳")
+
+    time_quota: float = Field(..., description="时间配额，单位秒")
+    time_used: float = Field(..., description="已用时间，单位秒")
+    space_quota: int = Field(..., description="空间配额，单位字节")
+    space_used: int = Field(..., description="已用空间，单位字节")
+
 # 获取学生代码空间信息 api
 @WSGI.get(
     "/student/<id>/codespace/info",
@@ -369,7 +356,7 @@ async def student_codespace_stop(id: str):
         200: {
             "description": "成功返回学生代码空间信息",
             "content": {
-                "application/json": {"schema": StudentDetail.model_json_schema()}
+                "application/json": {"schema": CodespaceInfo.model_json_schema()}
             },
         },
         404: {"description": "学生不存在"},
