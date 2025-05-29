@@ -38,9 +38,6 @@ class Config(Configuration):
     CORE: type["Core"]
     """核心模块配置"""
 
-    CLUSTER: type["ClusterConfig"]
-    """集群配置"""
-
 
 CONFIG = Config
 
@@ -60,24 +57,3 @@ class Core(Configuration):
     """学生数据的归档目录，必须以 / 结尾"""
 
 CONFIG.CORE = Core
-
-# ==================================================================================== #
-
-class ClusterConfig(Configuration):
-    """集群配置"""
-    DEFAULT_TYPE = "mock"
-    class Kubernetes(Configuration):
-        NAMESPACE = "default"
-        KUBECONFIG_PATH = None
-        TIMEOUT = 30
-    
-    class Codespace(Configuration):
-        """code-server 专用配置"""
-        IMAGE = "docker.io/codercom/code-server:latest"
-        DEFAULT_PASSWORD = "student123"
-        DEFAULT_CPU_LIMIT = "1000m"
-        DEFAULT_MEMORY_LIMIT = "2Gi"
-        DEFAULT_STORAGE_SIZE = "5Gi"
-        PORT = 8080
-
-CONFIG.CLUSTER = ClusterConfig
