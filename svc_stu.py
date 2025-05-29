@@ -91,7 +91,7 @@ def index():
 _TAG_LOGIN = Tag(name="login", description="登录认证")
 
 
-def check_api_key() -> str:
+async def check_api_key() -> str:
     """检查 API-KEY，返回账户"""
 
     from util import api_key_dec
@@ -102,9 +102,20 @@ def check_api_key() -> str:
     if api_key is None:
         api_key = request.args.get("X-API-KEY")
     if api_key:
-        if account := api_key_dec(api_key):
-            g.current_account = account
-            return account
+        account = api_key_dec(api_key)
+        if not account:
+            raise ErrorResponse(Response(
+                "API-KEY无效",
+                status=403,
+            ))
+        user=await core.student.TABLE.get_user_info(account)
+        if not user.name and not user.mail:
+            raise ErrorResponse(Response(
+                "User not Found",
+                status=403,
+            ))
+        g.current_account = account
+        return account
     raise ErrorResponse(
         Response(
             "UNAUTHORIZED: please set the 'X-API-KEY'"
@@ -172,7 +183,9 @@ _TAG_USER = Tag(name="user", description="用户设置")
 )
 async def user_info():
     """获取用户信息"""
-    pass  # TODO
+    account =await check_api_key()
+    user = await core.student.TABLE.get_user_info(account)
+    return user.model_dump()
 
 
 @WSGI.put(
@@ -187,7 +200,12 @@ async def user_info():
 )
 async def user_update(body: core.student.UserInfo):
     """修改用户信息"""
-    pass  # TODO
+    account = await check_api_key()
+    try:
+        await core.student.TABLE.set_user_info(account, body)
+        return _OK
+    except core.student.StudentNotFoundError as e:
+        raise ErrorResponse(Response(str(e), status=403))
 
 
 class UserResetPassword(BaseModel):
@@ -206,8 +224,18 @@ class UserResetPassword(BaseModel):
     security=_SECURITY,
 )
 async def user_reset_password(body: UserResetPassword):
-    """重置密码"""
-    pass  # TODO
+    # """重置密码"""
+    # pass    #TODO
+    account = await check_api_key()
+    try:
+        if not await core.student.TABLE.check_password(account, body.old_pwd):
+            raise ErrorResponse(Response("旧密码错误", status=400))
+        await core.student.TABLE.reset_password(account, body.new_pwd)
+        return _OK
+    except core.student.StudentNotFoundError as e:
+        raise ErrorResponse(Response(str(e), status=403))
+
+
 
 
 # ==================================================================================== #
@@ -227,7 +255,18 @@ _TAG_CODESPACE = Tag(name="codespace", description="代码空间")
 )
 async def codespace():
     """进入代码空间（重定向）"""
-    pass  # TODO
+    # pass    #TODO
+    account=check_api_key()
+    space_status=await core.student.CODESPACE.get_status(account)
+    url=await core.student.CODESPACE.get_url(account)
+
+    if space_status=="running" and url:
+        return redirect(url,code=302)
+    elif space_status=="running" and not url:
+        return redirect("/",code=307)
+    else:
+        return redirect("/",code=303)
+
 
 
 @WSGI.post(
@@ -243,7 +282,8 @@ async def codespace():
 )
 async def codespace_start():
     """启动代码空间，立即返回，不会等待代码空间启动完成"""
-    pass  # TODO
+    pass    #TODO
+
 
 
 @WSGI.delete(
