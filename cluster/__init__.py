@@ -28,7 +28,7 @@ class JobParams(BaseModel):
     storage_size: Optional[str] = Field(None, description="存储大小，如 '5Gi'")
     
     # 用户信息（用于隔离）
-    user_id: int = Field(..., description="用户ID")
+    user_id: str = Field(..., description="用户ID")
 
 
 class JobInfo(BaseModel):
@@ -138,12 +138,12 @@ def create(type:str = "mock", config = CONFIG) -> ClusterABC:
         raise ValueError(f"Unsupported cluster type: {type}")
 
 
-def create_code_server_job(user_id: int, **kwargs) -> JobParams:
+def create_code_server_job(user_id: str, **kwargs) -> JobParams:
     """创建 code-server 作业参数的便捷函数"""
     config = CONFIG.CLUSTER.Codespace
     
     return JobParams(
-        name=f"code-server-{user_id}",
+        name=user_id,
         image=config.IMAGE,
         ports=[config.PORT],
         env={
