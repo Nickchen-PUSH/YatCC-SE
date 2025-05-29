@@ -103,11 +103,6 @@ async def check_api_key() -> str:
         api_key = request.args.get("X-API-KEY")
     if api_key:
         account = api_key_dec(api_key)
-        if not account:
-            raise ErrorResponse(Response(
-                "User not Found",
-                status=403,
-            ))
         user=await core.student.TABLE.get_user_info(account)
         if not user.name and not user.mail:
             raise ErrorResponse(Response(
@@ -206,8 +201,6 @@ async def user_update(body: core.student.UserInfo):
         return _OK
     except core.student.StudentNotFoundError as e:
         raise ErrorResponse(Response(str(e), status=403))
-    except ValueError as e:
-        raise ErrorResponse(Response(str(e), status=400))
 
 
 class UserResetPassword(BaseModel):
@@ -236,8 +229,6 @@ async def user_reset_password(body: UserResetPassword):
         return _OK
     except core.student.StudentNotFoundError as e:
         raise ErrorResponse(Response(str(e), status=403))
-    except ValueError as e:
-        raise ErrorResponse(Response(str(e), status=400))
 
 
 
