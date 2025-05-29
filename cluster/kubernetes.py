@@ -184,30 +184,22 @@ class KubernetesCluster(ClusterABC):
             annotations = deployment.metadata.annotations or {}
             is_suspended = annotations.get("yatcc-se/suspended") == "true"
             
-            LOGGER.info(f"Checking deployment {job_id} suspension status:")
-            LOGGER.info(f"  - Annotations: {annotations}")
-            LOGGER.info(f"  - Is suspended: {is_suspended}")
+            logger.info(f"Checking deployment {job_name} suspension status:")
+            logger.info(f"  - Annotations: {annotations}")
+            logger.info(f"  - Is suspended: {is_suspended}")
             
             if is_suspended:
                 # 恢复 Deployment
-                LOGGER.info(f"Unsuspending deployment: {job_id}")
-                await self._unsuspend_deployment(job_id)
-                LOGGER.info(f"Resumed suspended deployment: {job_id}")
-                
-                # 等待一下，然后重新读取 deployment 以获取最新状态
-                await aio.sleep(2)
-                deployment = await aio.to_thread(
-                    self.apps_v1.read_namespaced_deployment,
-                    name=job_id,
-                    namespace=self.config.Kubernetes.NAMESPACE
-                )
+                logger.info(f"Unsuspending deployment: {job_name}")
+                await self._unsuspend_deployment(job_name)
+                logger.info(f"Resumed suspended deployment: {job_name}")
                 
                 # 验证注解是否被移除
                 updated_annotations = deployment.metadata.annotations or {}
                 LOGGER.info(f"After unsuspend, annotations: {updated_annotations}")
             else:
                 # Deployment 已经在运行
-                LOGGER.info(f"Deployment {job_id} is already running")
+                logger.info(f"Deployment {job_name} is already running")
             
             # 🎯 更新环境变量和配置（如果有变化）
             await self._update_deployment_if_needed(job_name, job_params)
@@ -228,47 +220,16 @@ class KubernetesCluster(ClusterABC):
         except ApiException as e:
             if e.status == 404:
                 # Deployment 不存在了，创建新的
-                LOGGER.warning(f"Deployment {job_id} not found, creating new one")
+                logger.warning(f"Deployment {job_name} not found, creating new one")
                 return await self._create_new_deployment(job_params)
             raise ClusterError(f"Failed to resume deployment: {e}")
 
-    async def _create_new_deployment(self, job_params: JobParams) -> JobInfo:
-        """创建新的 Deployment"""
-        # 生成唯一作业名称
-        job_name = self._generate_job_name(job_params)
-        
-        try:
-            # 创建 Deployment
-            await self._create_deployment(job_name, job_params)
-            
-            # 创建 Service
-            service_url = await self._create_service(job_name, job_params)
-            
-            return JobInfo(
-                id=job_name,
-                name=job_params.name,
-                image=job_params.image,
-                ports=job_params.ports,
-                env=job_params.env,
-                status=JobInfo.Status.RUNNING,
-                created_at=datetime.now().isoformat(),
-                namespace=self.config.Kubernetes.NAMESPACE,
-                service_url=service_url,
-                user_id=job_params.user_id,
-            )
-            
-        except Exception as e:
-            LOGGER.error(f"Failed to submit job: {e}")
-            # 清理可能创建的资源
-            await self._cleanup_job_resources(job_name)
-            raise ClusterError(f"Failed to submit job: {e}")
-
-    async def _unsuspend_deployment(self, job_id: str) -> None:
+    async def _unsuspend_deployment(self, job_name: str) -> None:
         """恢复被暂停的 Deployment"""
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                LOGGER.info(f"Unsuspending deployment {job_id} (attempt {attempt + 1})")
+                logger.info(f"Unsuspending deployment {job_name} (attempt {attempt + 1})")
                 
                 # 重新读取最新的 deployment
                 deployment = await aio.to_thread(
@@ -313,24 +274,24 @@ class KubernetesCluster(ClusterABC):
                     body=deployment
                 )
                 
-                LOGGER.info(f"Successfully unsuspended deployment: {job_id}")
-                LOGGER.info(f"Final replicas: {updated_deployment.spec.replicas}")
-                LOGGER.info(f"Final annotations: {updated_deployment.metadata.annotations}")
+                logger.info(f"Successfully unsuspended deployment: {job_name}")
+                logger.info(f"Final replicas: {updated_deployment.spec.replicas}")
+                logger.info(f"Final annotations: {updated_deployment.metadata.annotations}")
                 return
                 
             except ApiException as e:
                 if e.status == 409 and attempt < max_retries - 1:
                     # 版本冲突，等待一下再重试
-                    LOGGER.warning(f"Deployment {job_id} version conflict, retrying... (attempt {attempt + 1})")
+                    logger.warning(f"Deployment {job_name} version conflict, retrying... (attempt {attempt + 1})")
                     await aio.sleep(0.5 * (attempt + 1))  # 递增等待时间
                     continue
                 elif e.status == 404:
-                    LOGGER.warning(f"Deployment {job_id} not found during unsuspend")
+                    logger.warning(f"Deployment {job_name} not found during unsuspend")
                     return
                 else:
                     raise ClusterError(f"Failed to unsuspend deployment: {e}")
             except Exception as e:
-                LOGGER.error(f"Unexpected error unsuspending {job_id}: {e}")
+                logger.error(f"Unexpected error unsuspending {job_name}: {e}")
                 raise ClusterError(f"Unexpected error unsuspending deployment: {e}")
     
 
@@ -381,7 +342,7 @@ class KubernetesCluster(ClusterABC):
                         body=deployment
                     )
                     
-                    LOGGER.info(f"Updated deployment configuration: {job_id}")
+                    logger.info(f"Updated deployment configuration: {job_name}")
                     return True
                 
                 return False
@@ -389,17 +350,17 @@ class KubernetesCluster(ClusterABC):
             except ApiException as e:
                 if e.status == 409 and attempt < max_retries - 1:
                     # 版本冲突，等待一下再重试
-                    LOGGER.warning(f"Deployment {job_id} update conflict, retrying... (attempt {attempt + 1})")
+                    logger.warning(f"Deployment {job_name} update conflict, retrying... (attempt {attempt + 1})")
                     await aio.sleep(0.5 * (attempt + 1))
                     continue
                 elif e.status == 404:
-                    LOGGER.warning(f"Deployment {job_id} not found during update")
+                    logger.warning(f"Deployment {job_name} not found during update")
                     return False
                 else:
-                    LOGGER.warning(f"Failed to update deployment {job_id}: {e}")
+                    logger.warning(f"Failed to update deployment {job_name}: {e}")
                     return False
         
-        LOGGER.warning(f"Failed to update deployment {job_id} after {max_retries} attempts")
+        logger.warning(f"Failed to update deployment {job_name} after {max_retries} attempts")
         return False
 
     async def _ensure_service_exists(self, job_name: str, job_params: JobParams) -> str:
@@ -417,8 +378,8 @@ class KubernetesCluster(ClusterABC):
         except ApiException as e:
             if e.status == 404:
                 # Service 不存在，创建它
-                LOGGER.info(f"Service not found for {job_id}, creating...")
-                return await self._create_service(job_id, job_params)
+                logger.info(f"Service not found for {job_name}, creating...")
+                return await self._create_service(job_name, job_params)
             raise ClusterError(f"Failed to check service: {e}")
 
     async def _build_job_info_from_deployment(self, deployment, service_url: str) -> JobInfo:
@@ -451,33 +412,6 @@ class KubernetesCluster(ClusterABC):
         """生成作业名称"""
         base_name = f"{job_params.user_id}"
         return base_name
-
-    # async def _create_pvc(self, job_name: str, job_params: JobParams):
-    #     """创建持久化存储卷"""
-    #     pvc_spec = {
-    #         "apiVersion": "v1",
-    #         "kind": "PersistentVolumeClaim",
-    #         "metadata": {
-    #             "name": f"{job_name}-pvc",
-    #             "labels": self._build_labels(job_params),
-    #             "namespace": self.config.Kubernetes.NAMESPACE
-    #         },
-    #         "spec": {
-    #             "accessModes": ["ReadWriteOnce"],
-    #             "resources": {
-    #                 "requests": {
-    #                     "storage": job_params.storage_size or self.config.CodeServer.DEFAULT_STORAGE_SIZE
-    #                 }
-    #             }
-    #         }
-    #     }
-        
-        # await aio.to_thread(
-        #     self.core_v1.create_namespaced_persistent_volume_claim,
-        #     namespace=self.config.Kubernetes.NAMESPACE,
-        #     body=pvc_spec
-        # )
-        # LOGGER.info(f"Created PVC: {job_name}-pvc")
 
     async def _create_deployment(self, job_name: str, job_params: JobParams):
         """创建 Deployment"""
@@ -1004,12 +938,12 @@ class KubernetesCluster(ClusterABC):
                 # 使用重试机制更新 deployment
                 success = await self._suspend_deployment_with_retry(job_name, current_replicas)
                 if success:
-                    suspended_jobs.append(job_id)
-                    LOGGER.info(f"Suspended deployment: {job_id} (user: {user_id})")
+                    suspended_jobs.append(job_name)
+                    logger.info(f"Suspended deployment: {job_name} (user: {job_name})")
                 else:
-                    LOGGER.warning(f"Failed to suspend deployment: {job_id}")
+                    logger.warning(f"Failed to suspend deployment: {job_name}")
             
-            LOGGER.info(f"Suspended {len(suspended_jobs)} deployments for user {user_id}")
+            logger.info(f"Suspended {len(suspended_jobs)} deployments for user {job_name}")
             return suspended_jobs
             
         except ApiException as e:
@@ -1050,17 +984,17 @@ class KubernetesCluster(ClusterABC):
             except ApiException as e:
                 if e.status == 409 and attempt < max_retries - 1:
                     # 版本冲突，等待一下再重试
-                    LOGGER.warning(f"Deployment {job_id} suspend conflict, retrying... (attempt {attempt + 1})")
+                    logger.warning(f"Deployment {job_name} suspend conflict, retrying... (attempt {attempt + 1})")
                     await aio.sleep(0.5 * (attempt + 1))
                     continue
                 elif e.status == 404:
-                    LOGGER.warning(f"Deployment {job_id} not found during suspend")
+                    logger.warning(f"Deployment {job_name} not found during suspend")
                     return False
                 else:
-                    LOGGER.error(f"Failed to suspend deployment {job_id}: {e}")
+                    logger.error(f"Failed to suspend deployment {job_name}: {e}")
                     return False
         
-        LOGGER.error(f"Failed to suspend deployment {job_id} after {max_retries} attempts")
+        logger.error(f"Failed to suspend deployment {job_name} after {max_retries} attempts")
         return False
 
     async def cleanup(self, job_name: str) -> None:

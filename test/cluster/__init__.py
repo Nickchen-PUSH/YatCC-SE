@@ -310,9 +310,3 @@ class ClusterTestBase(AsyncTestCase):
         self.assert_job_info_valid(job_info)
         self.assertIn(8080, job_info.ports)
         self.assertIn("PASSWORD", job_info.env)
-    
-    def assert_user_isolation(self, job_info, expected_user_id: int):
-        """验证用户隔离"""
-        self.assertEqual(job_info.user_id, expected_user_id)
-        # 验证作业名称包含用户标识
-        self.assertIn(f"{expected_user_id}", job_info.name)
