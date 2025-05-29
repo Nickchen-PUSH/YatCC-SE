@@ -5,8 +5,9 @@ from flask import Response, g, redirect, request
 from flask_openapi3 import Info, OpenAPI, Tag
 from pydantic import BaseModel, Field, RootModel
 
-from config import CONFIG, RUNNER, ENVIRON
+from config import CONFIG, ENVIRON
 from base.logger import logger
+from base import RUNNER
 from core import admin, student
 
 LOGGER = logger(__spec__, __file__)
