@@ -59,64 +59,131 @@ class Student(BaseModel):
 
 # ==================================================================================== #
 
+import os
+from datetime import datetime
+from typing import AsyncIterator, cast
 
-class StudentError(Error):
-    """学生模块错误基类"""
+from pydantic import BaseModel, Field, RootModel
+from werkzeug.security import check_password_hash, generate_password_hash
 
+import cluster
+from base.logger import logger
+
+from . import Error
+
+LOGGERR = logger(__spec__, __file__)
+
+
+class UserInfo(BaseModel):
+    name: str = Field("", max_length=32, description="姓名")
+    mail: str = Field("", max_length=32, description="邮箱")
+
+
+class CodespaceInfo(BaseModel):
+    status: str = Field("stopped", description="代码空间状态")
+    url: str = Field("", description="代码空间URL")
+
+    time_quota: int = Field(0, description="代码空间时间配额（秒）")
+    time_used: int = Field(0, description="代码空间已使用时间（秒）")
+
+    last_start: float = Field(0, description="代码空间最后启动的 POSIX 时间戳")
+    last_stop: float = Field(0, description="代码空间最后停止的 POSIX 时间戳")
+    last_active: float = Field(0, description="代码空间最后活动的 POSIX 时间戳")
+    last_watch: float = Field(0, description="代码空间最后检查的 POSIX 时间戳")
+
+
+class Student(BaseModel):
+    """学生信息模型"""
+
+    sid: str = Field(..., max_length=32, description="学号")
+    pwd_hash: str = Field("", description="密码哈希")
+
+    user_info: UserInfo = Field(default_factory=UserInfo, description="用户信息")
+    codespace: CodespaceInfo = Field(
+        default_factory=CodespaceInfo, description="代码空间信息"
+    )
+
+    def reset_password(self, new_password: str) -> None:
+        """重置密码"""
+        self.pwd_hash = generate_password_hash(new_password)
+
+    def check_password(self, password: str) -> bool:
+        """检查密码"""
+        return check_password_hash(self.pwd_hash, password)
+
+    def get_codespace_password(self) -> str:
+        """获取代码空间密码"""
+        from util import api_key_enc
+
+        return api_key_enc(self.sid)
+
+
+# ==================================================================================== #
+
+
+class StudentNotFoundError(Error):
+    """学生记录未找到"""
+    
     def __init__(self, sid: str, *args):
         self.sid = sid
         super().__init__(*args)
-
-
-class StudentNotFoundError(StudentError):
-    """学生记录未找到"""
 
     def __str__(self):
         return f"Student {self.sid!r} not found: {super().__str__()}"
 
 
-class StudentAlreadyExistsError(StudentError):
+class StudentAlreadyExistsError(Error):
     """学生记录已存在"""
+    
+    def __init__(self, sid: str, *args):
+        self.sid = sid
+        super().__init__(*args)
 
     def __str__(self):
         return f"Student {self.sid!r} already exists: {super().__str__()}"
 
 
-class StudentDirectoryError(StudentError):
+class StudentDirectoryError(Error):
     """学生目录错误"""
 
     def __init__(self, sid: str, message: str, *args):
         self.sid = sid
-        super().__init__(sid, message, *args)
+        super().__init__(message, *args)
 
     def __str__(self):
         return f"Student {self.sid!r} directory error: {super().__str__()}"
 
 
-class CodespaceQuotaExceededError(StudentError):
+class CodespaceQuotaExceededError(Error):
     """代码空间配额已用尽错误"""
+    
+    def __init__(self, sid: str, *args):
+        self.sid = sid
+        super().__init__(*args)
     
     def __str__(self) -> str:
         return f"Codespace quota exceeded: {self.sid}"
 
 
-class CodespaceStartError(StudentError):
+class CodespaceStartError(Error):
     """代码空间启动错误"""
     
     def __init__(self, sid: str, reason: str, *args):
+        self.sid = sid
         self.reason = reason
-        super().__init__(sid, *args)
+        super().__init__(*args)
     
     def __str__(self) -> str:
         return f"Failed to start codespace: {self.sid}, reason: {self.reason}"
 
 
-class CodespaceStopError(StudentError):
+class CodespaceStopError(Error):
     """代码空间停止错误"""
     
     def __init__(self, sid: str, reason: str, *args):
+        self.sid = sid
         self.reason = reason
-        super().__init__(sid, *args)
+        super().__init__(*args)
     
     def __str__(self) -> str:
         return f"Failed to stop codespace: {self.sid}, reason: {self.reason}"
