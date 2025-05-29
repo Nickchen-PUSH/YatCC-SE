@@ -87,14 +87,15 @@ class Basic(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
         # 测试含有错误的apikey获取用户信息
-        resp = self.client.get("/user", headers=self.header)
+        resp = self.client.get("/user", headers=self.wrong_header)
         self.assertEqual(resp.status_code, 403)
         # 测试含有apikey获取用户信息
         resp = self.client.get("/user", headers=self.header)
         self.assertEqual(resp.status_code, 200)
         # 检测获取用户信息是否正确
-        self.assertEqual(updated_info["name"], "顾宇浩")
-        self.assertEqual(updated_info["mail"], "yhgu2000@outlook.com")
+        user_info = resp.json
+        self.assertEqual(user_info["name"], "顾宇浩")
+        self.assertEqual(user_info["mail"], "yhgu2000@outlook.com")
 
 
         # 测试不含有apikey更新用户信息
@@ -134,7 +135,7 @@ class Basic(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
 
         # 检测用户信息是否被更改
-        resp = self.client.get("/user", headers=self.headers)
+        resp = self.client.get("/user", headers=self.header)
         self.assertEqual(resp.status_code, 200)
         
         updated_info = resp.json
