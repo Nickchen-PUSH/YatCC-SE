@@ -16,15 +16,18 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from cluster import JobParams, ClusterConfig, create
+from cluster import create, ClusterConfig
 
 
 def check_kubernetes_available():
     """检查是否可以使用 Kubernetes"""
     try:
         import kubernetes
+        # 尝试导入 Kubernetes 客户端
+        kubernetes.config.load_kube_config()
+        print("✅ Kubernetes Python 客户端可用")
         return True
-    except ImportError:
+    except :
         return False
 
 

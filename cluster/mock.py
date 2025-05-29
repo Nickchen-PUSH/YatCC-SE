@@ -21,7 +21,7 @@ class MockCluster(ClusterABC):
         super().__init__(config)
         self._jobs: Dict[str, JobInfo] = {}
 
-    async def create_job(self, job_params):
+    async def allocate_resources(self, job_params):
         """创建模拟的 code-server 作业"""
         
         await self.ensure_initialized()
@@ -116,6 +116,15 @@ class MockCluster(ClusterABC):
             raise JobNotFoundError(f"Job not found: {job_id}")
         
         return self._jobs[job_id].copy(deep=True)
+
+    async def get_service_url(self, job_id: str) -> str:
+        """获取模拟作业的服务访问地址"""
+        await self.ensure_initialized()
+        
+        if job_id not in self._jobs:
+            raise JobNotFoundError(f"Job not found: {job_id}")
+        
+        return self._jobs[job_id].service_url
 
     async def delete_job(self, job_id: str) -> None:
         """删除模拟作业"""
