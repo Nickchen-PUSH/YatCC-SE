@@ -10,10 +10,10 @@ class MockCluster(ClusterABC):
         from random import randint
 
         ret = JobInfo(
-            id=randint(0, 1 << 31),
+            id=str(randint(0, 1 << 31)),
             name=job_params.name,
             image=job_params.image,
-            status=JobInfo.Status.Running,
+            status=JobInfo.Status.RUNNING,
             ports=job_params.ports,
             env=job_params.env,
         )
@@ -40,7 +40,7 @@ class MockCluster(ClusterABC):
     async def delete_job(self, job_id: str) -> None:
         job_info = self.jobs.pop(job_id, None)
         if job_info:
-            job_info.status = JobInfo.Status.Success
+            job_info.status = JobInfo.Status.SUCCESS
         else:
             raise ValueError(f"Job with ID {job_id} not found.")
     
