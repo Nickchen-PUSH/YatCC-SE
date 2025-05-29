@@ -43,7 +43,6 @@ class KubernetesCluster(ClusterABC):
         try:
             # 导入 Kubernetes 客户端
             from kubernetes import client, config as k8s_config
-            from kubernetes.client.rest import ApiException
             
             # 尝试加载配置
             try:
@@ -92,7 +91,7 @@ class KubernetesCluster(ClusterABC):
         """获取 CoreV1Api 客户端"""
         return self._core_v1
 
-    async def create_job(self, job_params):
+    async def allocate_resources(self, job_params):
         """创建作业"""
         await self.ensure_initialized()
         
@@ -371,8 +370,8 @@ class KubernetesCluster(ClusterABC):
                     
                     # 更新资源限制
                     container.resources.limits = {
-                        "memory": job_params.memory_limit or self.config.CodeServer.DEFAULT_MEMORY_LIMIT,
-                        "cpu": job_params.cpu_limit or self.config.CodeServer.DEFAULT_CPU_LIMIT
+                        "memory": job_params.memory_limit or self.config.Codespace.DEFAULT_MEMORY_LIMIT,
+                        "cpu": job_params.cpu_limit or self.config.Codespace.DEFAULT_CPU_LIMIT
                     }
                     
                     await aio.to_thread(
@@ -439,7 +438,7 @@ class KubernetesCluster(ClusterABC):
             id=deployment.metadata.name,
             name=deployment.metadata.labels.get("app", deployment.metadata.name),
             image=container.image,
-            ports=[self.config.CodeServer.PORT],
+            ports=[self.config.Codespace.PORT],
             env={env_var.name: env_var.value for env_var in (container.env or [])},
             status=status,
             created_at=deployment.metadata.creation_timestamp.isoformat() if deployment.metadata.creation_timestamp else None,
@@ -508,7 +507,7 @@ class KubernetesCluster(ClusterABC):
                         "containers": [{
                             "name": "code-server",
                             "image": job_params.image,
-                            "ports": [{"containerPort": self.config.CodeServer.PORT}],
+                            "ports": [{"containerPort": self.config.Codespace.PORT}],
                             "env": [{"name": k, "value": v} for k, v in env_vars.items()],
                             "args": [
                                 "--bind-addr=0.0.0.0:8080",
@@ -536,14 +535,14 @@ class KubernetesCluster(ClusterABC):
                                     "cpu": "250m"
                                 },
                                 "limits": {
-                                    "memory": job_params.memory_limit or self.config.CodeServer.DEFAULT_MEMORY_LIMIT,
-                                    "cpu": job_params.cpu_limit or self.config.CodeServer.DEFAULT_CPU_LIMIT
+                                    "memory": job_params.memory_limit or self.config.Codespace.DEFAULT_MEMORY_LIMIT,
+                                    "cpu": job_params.cpu_limit or self.config.Codespace.DEFAULT_CPU_LIMIT
                                 },
                             },
                             "readinessProbe": {
                                 "httpGet": {
                                     "path": "/",
-                                    "port": self.config.CodeServer.PORT
+                                    "port": self.config.Codespace.PORT
                                 },
                                 "initialDelaySeconds": 30,
                                 "periodSeconds": 10
@@ -551,7 +550,7 @@ class KubernetesCluster(ClusterABC):
                             "livenessProbe": {
                                 "httpGet": {
                                     "path": "/",
-                                    "port": self.config.CodeServer.PORT
+                                    "port": self.config.Codespace.PORT
                                 },
                                 "initialDelaySeconds": 60,
                                 "periodSeconds": 30
@@ -606,8 +605,8 @@ class KubernetesCluster(ClusterABC):
             "spec": {
                 "selector": {"app": job_name},
                 "ports": [{
-                    "port": self.config.CodeServer.PORT,
-                    "targetPort": self.config.CodeServer.PORT,
+                    "port": self.config.Codespace.PORT,
+                    "targetPort": self.config.Codespace.PORT,
                     "protocol": "TCP",
                     "name": "http"
                 }],
@@ -959,7 +958,7 @@ class KubernetesCluster(ClusterABC):
                     name=f"{job_name}-svc",
                     namespace=self.config.Kubernetes.NAMESPACE
                 )
-                service_url = f"http://{service.metadata.name}.{service.metadata.namespace}.svc.cluster.local:{self.config.CodeServer.PORT}"
+                service_url = f"http://{service.metadata.name}.{service.metadata.namespace}.svc.cluster.local:{self.config.Codespace.PORT}"
             except ApiException:
                 pass
             
@@ -967,7 +966,7 @@ class KubernetesCluster(ClusterABC):
                 id=deployment.metadata.name,
                 name=deployment.metadata.labels.get("app", deployment.metadata.name),
                 image=container.image,
-                ports=[self.config.CodeServer.PORT],
+                ports=[self.config.Codespace.PORT],
                 env={env_var.name: env_var.value for env_var in (container.env or [])},
                 status=status,
                 created_at=deployment.metadata.creation_timestamp.isoformat() if deployment.metadata.creation_timestamp else None,
@@ -1150,7 +1149,7 @@ class KubernetesCluster(ClusterABC):
                     id=deployment.metadata.name,
                     name=deployment.metadata.labels.get("app", deployment.metadata.name),
                     image=container.image,
-                    ports=[self.config.CodeServer.PORT],
+                    ports=[self.config.Codespace.PORT],
                     env={env_var.name: env_var.value for env_var in (container.env or [])},
                     status=status,
                     created_at=deployment.metadata.creation_timestamp.isoformat() if deployment.metadata.creation_timestamp else None,
