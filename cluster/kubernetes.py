@@ -106,8 +106,8 @@ class KubernetesCluster(ClusterABC):
         await self.ensure_initialized()
 
         # 验证必需参数
-        if not job_params.user_id:
-            raise ValueError("user_id is required")
+        if not job_params.name:
+            raise ValueError("job_name is required")
         
         existing_job = await self._find_user_deployment(job_params)
 
@@ -123,7 +123,7 @@ class KubernetesCluster(ClusterABC):
             deployments = await aio.to_thread(
                 self.apps_v1.list_namespaced_deployment,
                 namespace = self.config.Kubernetes.NAMESPACE,
-                label_selector=f"managed-by=yatcc-se,user-id={str(job_params.user_id)},type=code-server"
+                label_selector=f"managed-by=yatcc-se,user-id={job_params.user_id},type=code-server"
             )
 
             if deployments.items:
@@ -171,12 +171,12 @@ class KubernetesCluster(ClusterABC):
             await self._cleanup_job_resources(job_name)
             raise ClusterError(f"Failed to submit job: {e}")
 
-    async def _resume_user_deployment(self, job_id: str, job_params: JobParams) -> JobInfo:
+    async def _resume_user_deployment(self, job_name: str, job_params: JobParams) -> JobInfo:
         """恢复用户的 Deployment"""
         try:
             deployment = await aio.to_thread(
                 self.apps_v1.read_namespaced_deployment,
-                name=job_id,
+                name=job_name,
                 namespace=self.config.Kubernetes.NAMESPACE
             )
             
@@ -210,15 +210,15 @@ class KubernetesCluster(ClusterABC):
                 LOGGER.info(f"Deployment {job_id} is already running")
             
             # 🎯 更新环境变量和配置（如果有变化）
-            await self._update_deployment_if_needed(job_id, job_params)
+            await self._update_deployment_if_needed(job_name, job_params)
             
             # 确保 Service 存在
-            service_url = await self._ensure_service_exists(job_id, job_params)
+            service_url = await self._ensure_service_exists(job_name, job_params)
             
             # 再次读取最新的 deployment 状态
             final_deployment = await aio.to_thread(
                 self.apps_v1.read_namespaced_deployment,
-                name=job_id,
+                name=job_name,
                 namespace=self.config.Kubernetes.NAMESPACE
             )
             
@@ -273,7 +273,7 @@ class KubernetesCluster(ClusterABC):
                 # 重新读取最新的 deployment
                 deployment = await aio.to_thread(
                     self.apps_v1.read_namespaced_deployment,
-                    name=job_id,
+                    name=job_name,
                     namespace=self.config.Kubernetes.NAMESPACE
                 )
                 
@@ -308,7 +308,7 @@ class KubernetesCluster(ClusterABC):
                 # 执行更新
                 updated_deployment = await aio.to_thread(
                     self.apps_v1.patch_namespaced_deployment,
-                    name=job_id,
+                    name=job_name,
                     namespace=self.config.Kubernetes.NAMESPACE,
                     body=deployment
                 )
@@ -334,7 +334,7 @@ class KubernetesCluster(ClusterABC):
                 raise ClusterError(f"Unexpected error unsuspending deployment: {e}")
     
 
-    async def _update_deployment_if_needed(self, job_id: str, job_params: JobParams) -> bool:
+    async def _update_deployment_if_needed(self, job_name: str, job_params: JobParams) -> bool:
         """如果需要，更新 Deployment 的配置"""
         max_retries = 3
         for attempt in range(max_retries):
@@ -342,7 +342,7 @@ class KubernetesCluster(ClusterABC):
                 # 重新读取最新的 deployment
                 deployment = await aio.to_thread(
                     self.apps_v1.read_namespaced_deployment,
-                    name=job_id,
+                    name=job_name,
                     namespace=self.config.Kubernetes.NAMESPACE
                 )
                 
@@ -376,7 +376,7 @@ class KubernetesCluster(ClusterABC):
                     
                     await aio.to_thread(
                         self.apps_v1.patch_namespaced_deployment,
-                        name=job_id,
+                        name=job_name,
                         namespace=self.config.Kubernetes.NAMESPACE,
                         body=deployment
                     )
@@ -402,12 +402,12 @@ class KubernetesCluster(ClusterABC):
         LOGGER.warning(f"Failed to update deployment {job_id} after {max_retries} attempts")
         return False
 
-    async def _ensure_service_exists(self, job_id: str, job_params: JobParams) -> str:
+    async def _ensure_service_exists(self, job_name: str, job_params: JobParams) -> str:
         """确保 Service 存在"""
         try:
             service = await aio.to_thread(
                 self.core_v1.read_namespaced_service,
-                name=f"{job_id}-svc",
+                name=f"{job_name}-svc",
                 namespace=self.config.Kubernetes.NAMESPACE
             )
             
@@ -449,7 +449,7 @@ class KubernetesCluster(ClusterABC):
 
     def _generate_job_name(self, job_params: JobParams) -> str:
         """生成作业名称"""
-        base_name = f"codeserver-{job_params.user_id}"
+        base_name = f"{job_params.user_id}"
         return base_name
 
     # async def _create_pvc(self, job_name: str, job_params: JobParams):
@@ -980,7 +980,7 @@ class KubernetesCluster(ClusterABC):
                 raise JobNotFoundError(f"Job not found: {job_name}")
             raise ClusterError(f"Failed to get job info: {e}")
     
-    async def delete_job(self, user_id: int) -> List[str]:
+    async def delete_job(self, job_name: str) -> List[str]:
         """根据用户ID临时关闭用户的所有 Deployment"""
         await self.ensure_initialized()
         
@@ -988,21 +988,21 @@ class KubernetesCluster(ClusterABC):
             # 查找用户的所有 Deployment
             deployments = await aio.to_thread(
                 self.apps_v1.list_namespaced_deployment,
-                namespace=self.config.Kubernetes.NAMESPACE,
-                label_selector=f"managed-by=yatcc-se,user-id={user_id}"
+                name =job_name,
+                namespace=self.config.Kubernetes.NAMESPACE
             )
             
             suspended_jobs = []
             
             for deployment in deployments.items:
-                job_id = deployment.metadata.name
+                job_name = deployment.metadata.name
                 current_replicas = deployment.spec.replicas
                 
                 # 停止端口转发
-                await self.stop_port_forward(job_id)
+                await self.stop_port_forward(job_name)
                 
                 # 使用重试机制更新 deployment
-                success = await self._suspend_deployment_with_retry(job_id, current_replicas)
+                success = await self._suspend_deployment_with_retry(job_name, current_replicas)
                 if success:
                     suspended_jobs.append(job_id)
                     LOGGER.info(f"Suspended deployment: {job_id} (user: {user_id})")
@@ -1014,10 +1014,10 @@ class KubernetesCluster(ClusterABC):
             
         except ApiException as e:
             if e.status == 404:
-                raise JobNotFoundError(f"No deployments found for user: {user_id}")
+                raise JobNotFoundError(f"No deployments found for user: {job_name}")
             raise ClusterError(f"Failed to suspend deployments: {e}")
 
-    async def _suspend_deployment_with_retry(self, job_id: str, original_replicas: int) -> bool:
+    async def _suspend_deployment_with_retry(self, job_name: str, original_replicas: int) -> bool:
         """使用重试机制暂停 deployment"""
         max_retries = 3
         for attempt in range(max_retries):
@@ -1025,7 +1025,7 @@ class KubernetesCluster(ClusterABC):
                 # 重新读取最新的 deployment
                 deployment = await aio.to_thread(
                     self.apps_v1.read_namespaced_deployment,
-                    name=job_id,
+                    name=job_name,
                     namespace=self.config.Kubernetes.NAMESPACE
                 )
                 
@@ -1040,7 +1040,7 @@ class KubernetesCluster(ClusterABC):
                 
                 await aio.to_thread(
                     self.apps_v1.patch_namespaced_deployment,
-                    name=job_id,
+                    name=job_name,
                     namespace=self.config.Kubernetes.NAMESPACE,
                     body=deployment
                 )
@@ -1163,7 +1163,7 @@ class KubernetesCluster(ClusterABC):
         except ApiException as e:
             raise ClusterError(f"Failed to list jobs: {e}")
 
-    async def get_job_logs(self, job_id: str, lines: int = 100) -> str:
+    async def get_job_logs(self, job_name: str, lines: int = 100) -> str:
         """获取作业日志"""
         await self.ensure_initialized()
         
@@ -1172,11 +1172,11 @@ class KubernetesCluster(ClusterABC):
             pods = await aio.to_thread(
                 self.core_v1.list_namespaced_pod,
                 namespace=self.config.Kubernetes.NAMESPACE,
-                label_selector=f"app={job_id}"
+                label_selector=f"app={job_name}"
             )
             
             if not pods.items:
-                raise JobNotFoundError(f"No pods found for job: {job_id}")
+                raise JobNotFoundError(f"No pods found for job: {job_name}")
             
             # 获取第一个 Pod 的日志
             pod = pods.items[0]
@@ -1192,5 +1192,5 @@ class KubernetesCluster(ClusterABC):
             
         except ApiException as e:
             if e.status == 404:
-                raise JobNotFoundError(f"Job not found: {job_id}")
+                raise JobNotFoundError(f"Job not found: {job_name}")
             raise ClusterError(f"Failed to get job logs: {e}")

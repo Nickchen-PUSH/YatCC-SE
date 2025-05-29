@@ -137,7 +137,7 @@ async def main():
         from cluster import create_code_server_job
         
         job_params = create_code_server_job(
-            user_id=args.user_id,
+            user_id=str(args.user_id),
             workspace_name=args.workspace,
             memory_limit=args.memory,
             cpu_limit=args.cpu,
