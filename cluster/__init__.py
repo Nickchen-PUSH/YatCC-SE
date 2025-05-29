@@ -7,13 +7,31 @@ import asyncio as aio
 import logging
 from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
-from config import CONFIG, ClusterConfig
 
-from base import guard_ainit
+from base import guard_ainit, Configuration
 
 logger = logging.getLogger(__name__)
+
+
+class ClusterConfig(Configuration):
+    """集群配置"""
+    DEFAULT_TYPE = "mock"
+    class Kubernetes(Configuration):
+        NAMESPACE = "default"
+        KUBECONFIG_PATH = None
+        TIMEOUT = 30
+    
+    class CodeServer(Configuration):
+        """code-server 专用配置"""
+        IMAGE = "docker.io/codercom/code-server:latest"
+        DEFAULT_PASSWORD = "student123"
+        DEFAULT_CPU_LIMIT = "1000m"
+        DEFAULT_MEMORY_LIMIT = "2Gi"
+        DEFAULT_STORAGE_SIZE = "5Gi"
+        PORT = 8080
+
 
 class JobParams(BaseModel):
     """作业参数"""
@@ -28,7 +46,7 @@ class JobParams(BaseModel):
     storage_size: Optional[str] = Field(None, description="存储大小，如 '5Gi'")
     
     # 用户信息（用于隔离）
-    user_id: str = Field(..., description="用户ID")
+    user_id: int = Field(..., description="用户ID")
 
 
 class JobInfo(BaseModel):
@@ -73,11 +91,6 @@ class ClusterABC(ABC):
     async def ensure_initialized(self):
         if not self._initialized:
             await self.initialize()
-
-    @abstractmethod
-    async def allocate_resources(self, job_params: JobParams) -> JobInfo:
-        """创建作业（分配一个 deployment）"""
-        pass
 
     @abstractmethod
     async def submit_job(self, job_params: JobParams) -> JobInfo:
@@ -126,8 +139,15 @@ class JobNotFoundError(ClusterError):
     pass
 
 
-def create(type:str = "mock", config = CONFIG) -> ClusterABC:
+# 工厂函数
+def create(type: str = None, config: ClusterConfig = None) -> ClusterABC:
     """创建集群实例"""
+    if config is None:
+        config = ClusterConfig()
+    
+    if type is None:
+        type = config.DEFAULT_TYPE
+    
     if type == "mock":
         from .mock import MockCluster
         return MockCluster(config)
@@ -138,21 +158,34 @@ def create(type:str = "mock", config = CONFIG) -> ClusterABC:
         raise ValueError(f"Unsupported cluster type: {type}")
 
 
-def create_code_server_job(user_id: str, **kwargs) -> JobParams:
+def create_code_server_job(user_id: int, **kwargs) -> JobParams:
     """创建 code-server 作业参数的便捷函数"""
-    config = CONFIG.CLUSTER.Codespace
+    config = ClusterConfig()
     
     return JobParams(
-        name=user_id,
-        image=config.IMAGE,
-        ports=[config.PORT],
+        name=f"code-server-{user_id}",
+        image=config.CodeServer.IMAGE,
+        ports=[config.CodeServer.PORT],
         env={
             "PASSWORD": f"student{user_id}",
             "SUDO_PASSWORD": f"student{user_id}",
             **kwargs.get("env", {})
         },
         user_id=user_id,
-        cpu_limit=kwargs.get("cpu_limit", config.DEFAULT_CPU_LIMIT),
-        memory_limit=kwargs.get("memory_limit", config.DEFAULT_MEMORY_LIMIT),
-        storage_size=kwargs.get("storage_size", config.DEFAULT_STORAGE_SIZE)
+        cpu_limit=kwargs.get("cpu_limit", config.CodeServer.DEFAULT_CPU_LIMIT),
+        memory_limit=kwargs.get("memory_limit", config.CodeServer.DEFAULT_MEMORY_LIMIT),
+        storage_size=kwargs.get("storage_size", config.CodeServer.DEFAULT_STORAGE_SIZE)
     )
+
+
+# 全局集群实例
+_cluster_instance: Optional[ClusterABC] = None
+
+
+async def get_cluster() -> ClusterABC:
+    """获取全局集群实例"""
+    global _cluster_instance
+    if _cluster_instance is None:
+        _cluster_instance = create()
+        await _cluster_instance.initialize()
+    return _cluster_instance
