@@ -1,0 +1,37 @@
+services:
+  dev:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    container_name: yatcc-dev
+    privileged: true
+    volumes:
+      - .:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+      - minikube_data:/home/developer/.minikube
+    ports:
+      - "5000:5000"
+      - "8080:8080"
+      - "8443:8443"
+    working_dir: /workspace
+    stdin_open: true
+    tty: true
+    environment:
+      - PYTHONPATH=/workspace
+      - MINIKUBE_HOME=/home/developer/.minikube
+    command: /bin/bash
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    container_name: yatcc-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  redis_data:
+  minikube_data:
