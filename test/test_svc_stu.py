@@ -55,6 +55,7 @@ class Basic(unittest.TestCase):
         global WSGI
         self.client = WSGI.test_client()
         self.header = {"X-API-KEY": {api_key_enc("24111352")}}
+        self.wrong_header = {"X-API-KEY": {api_key_enc("wrong_sid")}}
 
     def tearDown(self) -> None:
         return
@@ -85,6 +86,9 @@ class Basic(unittest.TestCase):
         resp = self.client.get("/user")
         self.assertEqual(resp.status_code, 401)
 
+        # 测试含有错误的apikey获取用户信息
+        resp = self.client.get("/user", headers=self.header)
+        self.assertEqual(resp.status_code, 403)
         # 测试含有apikey获取用户信息
         resp = self.client.get("/user", headers=self.header)
         self.assertEqual(resp.status_code, 200)
@@ -103,8 +107,21 @@ class Basic(unittest.TestCase):
 
         )
 
-        # 测试含有apikey更新用户信息
         self.assertEqual(resp.status_code, 401)
+
+        # 测试含有错误的apikey更新用户信息
+        resp = self.client.put(
+            "/user",
+            json={
+                "name": "王文博",
+                "mail": "wwb2000@outlook.com",
+            },
+            headers=self.wrong_header,
+        )
+
+        self.assertEqual(resp.status_code, 403)
+
+        # 测试含有apikey更新用户信息
         resp = self.client.put(
             "/user",
             json={
@@ -148,6 +165,17 @@ class Basic(unittest.TestCase):
             },
         )
         self.assertEqual(resp.status_code, 401)
+
+        # 测试含有错误的apikey重置密码
+        resp = self.client.patch(
+            "/user",
+            json={
+                "old_pwd": "123456",
+                "new_pwd": "12345678",
+            },
+            headers=self.wrong_header,
+        )
+        self.assertEqual(resp.status_code, 403)
 
         # 测试含有apikey重置密码
         resp = self.client.patch(
