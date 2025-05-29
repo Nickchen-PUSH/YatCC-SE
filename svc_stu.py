@@ -103,6 +103,11 @@ async def check_api_key() -> str:
         api_key = request.args.get("X-API-KEY")
     if api_key:
         account = api_key_dec(api_key)
+        if not account:
+            raise ErrorResponse(Response(
+                "API-KEY无效",
+                status=403,
+            ))
         user=await core.student.TABLE.get_user_info(account)
         if not user.name and not user.mail:
             raise ErrorResponse(Response(
