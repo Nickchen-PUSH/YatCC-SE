@@ -414,7 +414,8 @@ class CODESPACE:
                     "STUDENT_ID": sid,
                     "USER_NAME": student.user_info.name,
                     "PASSWORD": student.get_codespace_password()
-                }
+                },
+                user_id=sid  # 添加必需的user_id字段
             )
             
             # 提交作业到集群
@@ -542,9 +543,9 @@ class CODESPACE:
                 job_status = await CLUSTER.get_job_status(job_id)
                 
                 # 映射集群作业状态到代码空间状态
-                if job_status == cluster.ClusterABC.JobStatus.RUNNING:
+                if job_status == cluster.JobInfo.Status.RUNNING:
                     return "running"
-                elif job_status == cluster.ClusterABC.JobStatus.PENDING:
+                elif job_status == cluster.JobInfo.Status.PENDING:
                     return "starting"
                 else:
                     # 作业已结束或失败，更新状态为stopped

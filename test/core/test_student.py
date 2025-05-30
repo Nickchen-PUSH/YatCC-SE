@@ -566,7 +566,7 @@ class CodespaceTest(AsyncTestCase):
             LOGGER.info("设置作业ID: %s", job_id)
             
             # 模拟CLUSTER.get_job_status返回RUNNING状态
-            with mock.patch('core.CLUSTER.get_job_status', return_value=cluster.ClusterABC.JobStatus.RUNNING):
+            with mock.patch('core.CLUSTER.get_job_status', return_value=cluster.JobInfo.Status.RUNNING):
                 # 获取状态
                 status = await CODESPACE.get_status(stu.sid)
                 self.assertEqual(status, "running")
@@ -607,7 +607,7 @@ class CodespaceTest(AsyncTestCase):
             LOGGER.info("设置作业ID: %s", job_id)
             
             # 模拟CLUSTER.get_job_status返回PENDING状态
-            with mock.patch('core.CLUSTER.get_job_status', return_value=cluster.ClusterABC.JobStatus.PENDING):
+            with mock.patch('core.CLUSTER.get_job_status', return_value=cluster.JobInfo.Status.PENDING):
                 # 获取状态
                 status = await CODESPACE.get_status(stu.sid)
                 self.assertEqual(status, "starting")
@@ -648,7 +648,7 @@ class CodespaceTest(AsyncTestCase):
             LOGGER.info("设置作业ID: %s", job_id)
             
             # 模拟CLUSTER.get_job_status返回SUCCESS状态
-            with mock.patch('core.CLUSTER.get_job_status', return_value=cluster.ClusterABC.JobStatus.SUCCESS):
+            with mock.patch('core.CLUSTER.get_job_status', return_value=cluster.JobInfo.Status.FAILED):
                 # 获取状态
                 status = await CODESPACE.get_status(stu.sid)
                 self.assertEqual(status, "stopped")

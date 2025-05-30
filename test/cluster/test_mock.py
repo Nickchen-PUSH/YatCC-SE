@@ -16,7 +16,7 @@ class MockClusterTest(ClusterTestBase):
     def test_submit_user_code_server_job(self):
         """测试提交用户 code-server 作业"""
         async def _test():
-            user_id = 5001
+            user_id = "5001"
             job_params = self.create_code_server_params(
                 user_id=user_id,
                 workspace_name="test-workspace"
@@ -36,7 +36,7 @@ class MockClusterTest(ClusterTestBase):
     def test_multiple_users_mock_deployments(self):
         """测试多用户模拟部署"""
         async def _test():
-            user_ids = [5001, 5002, 5003]
+            user_ids = ["5001", "5002", "5003"]
             jobs = []
             
             for user_id in user_ids:
@@ -57,8 +57,8 @@ class MockClusterTest(ClusterTestBase):
     def test_user_job_list(self):
         """测试用户作业列表"""
         async def _test():
-            user1_id = 5010
-            user2_id = 5011
+            user1_id = "5010"
+            user2_id = "5011"
             
             # 创建两个用户的作业
             job1_params = self.create_code_server_params(user_id=user1_id)
