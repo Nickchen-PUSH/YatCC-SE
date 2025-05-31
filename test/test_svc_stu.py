@@ -40,6 +40,33 @@ class Basic(unittest.TestCase):
             )
             stu.reset_password("123456")
             await student.TABLE.create(stu)
+            running_stu = student.Student(
+                sid="24111353",
+                user_info={
+                    "name": "高松灯",
+                    "mail": "gsd@outlook.com",
+                },
+                codespace={
+                    "time_quota": 3600,
+                },
+            )
+            running_stu.reset_password("123456")
+            await student.TABLE.create(running_stu)
+            await student.CODESPACE.start("24111353")
+
+            exceeded_stu = student.Student(
+                sid="24111354",
+                user_info={
+                    "name": "高松灯",
+                    "mail": "gsd@outlook.com",
+                },
+                codespace={
+                    "time_quota": 3600,
+                    "time_used": 3600,
+                },
+            )
+            exceeded_stu.reset_password("123456")
+            await student.TABLE.create(exceeded_stu)
 
         RUNNER.run(ado())
 
@@ -55,6 +82,8 @@ class Basic(unittest.TestCase):
         global WSGI
         self.client = WSGI.test_client()
         self.header = {"X-API-KEY": {api_key_enc("24111352")}}
+        self.running_header = {"X-API-KEY": {api_key_enc("24111353")}}
+        self.exceeded_header = {"X-API-KEY": {api_key_enc("24111354")}}
         self.wrong_header = {"X-API-KEY": {api_key_enc("wrong_sid")}}
 
     def tearDown(self) -> None:
@@ -213,3 +242,89 @@ class Basic(unittest.TestCase):
         )
 
         self.assertEqual(resp.status_code, 200)
+
+    def test_codespace(self):
+        self._test_api_key("/codespace", None, "GET")
+
+        # 测试未启动代码空间情况
+        resp = self.client.get("/codespace", headers=self.header)
+        self.assertEqual(resp.status_code, 303)
+
+        # 测试启动代码空间的情况
+        resp = self.client.get(
+            "/codespace",
+            headers=self.running_header,
+        )
+        self.assertEqual(resp.status_code, 302)
+
+
+    def test_start_codespace(self):
+        self._test_api_key("/codespace", None, "POST")
+
+        # 测试启动运行中的代码空间
+        resp = self.client.post(
+            "/codespace",
+            headers=self.running_header,
+        )
+        self.assertEqual(resp.status_code, 202)
+
+        # 测试启动未运行中的代码空间
+        resp = self.client.post(
+            "/codespace",
+            headers=self.header,
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        # 测试启动达到限额的代码空间
+        resp = self.client.post(
+            "/codespace",
+            headers=self.exceeded_header,
+        )
+        self.assertEqual(resp.status_code, 402)
+
+        
+        async def ado():
+            # 恢复旧数据
+            await student.CODESPACE.stop("24111352")
+
+        RUNNER.run(ado())
+
+    def test_stop_codespace(self):
+        self._test_api_key("/codespace", None, "DELETE")
+
+        # 测试关闭未启动的代码空间
+        resp = self.client.delete(
+            "/codespace",
+            headers=self.header,
+        )
+        self.assertEqual(resp.status_code, 202)
+
+        # 测试关闭已启动的代码空间
+        resp = self.client.delete(
+            "/codespace",
+            headers=self.running_header,
+        )
+        self.assertEqual(resp.status_code, 200)
+
+        
+        async def ado():
+            # 恢复旧数据
+            await student.CODESPACE.start("24111353")
+
+        RUNNER.run(ado())
+
+    def test_codespace_info(self):
+        self._test_api_key("/codespace/info", None, "GET")
+
+        # 测试获取未启动的代码空间信息
+        resp = self.client.get("/codespace/info", headers=self.header)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json["access_url"], False)
+
+        # 测试获取启动的代码空间信息
+        resp = self.client.get(
+            "/codespace",
+            headers=self.running_header,
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json["access_url"], "http://localhost:8080/codespace/24111353")
