@@ -34,11 +34,11 @@ class InitTest(AsyncTestCase):
     def tearDown(self) -> None:
         return
 
-    def test_init(self):
+    async def test_init(self):
         """测试核心层初始化"""
 
-        self.assertTrue(core.DB0.ping())
-        self.assertTrue(core.DB_STU.ping())
+        self.assertTrue(await core.DB0.ping())
+        self.assertTrue(await core.DB_STU.ping())
 
 
 if __name__ == "__main__":

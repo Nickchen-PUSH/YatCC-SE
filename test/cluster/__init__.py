@@ -244,7 +244,7 @@ class ClusterTestBase(AsyncTestCase):
         default_params.update(kwargs)
         return JobParams(**default_params)
     
-    def create_code_server_params(self, user_id: int, workspace_name: str = None, **kwargs) -> JobParams:
+    def create_code_server_params(self, user_id: str, workspace_name: str = None, **kwargs) -> JobParams:
         """创建用户独立的 code-server 作业参数"""
         return create_code_server_job(user_id=user_id, workspace_name=workspace_name, **kwargs)
     
