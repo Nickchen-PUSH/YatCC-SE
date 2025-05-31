@@ -194,6 +194,13 @@ class Basic(unittest.TestCase):
         self.assertEqual(resp.json["name"], "顾宇浩clone4")
         self.assertEqual(resp.json["mail"], "yhgu2004@outlook.com")
 
+        async def ado():
+            # 删除测试数据
+            await student.TABLE.delete("24111355")
+            await student.TABLE.delete("24111356")
+
+        RUNNER.run(ado())
+
 
     def test_delete_student(self):
 
@@ -225,6 +232,36 @@ class Basic(unittest.TestCase):
 
         resp = self.client.get("/student/24111354", headers=self.header)
         self.assertEqual(resp.status_code, 200)
+
+        async def ado():
+            # 重置测试数据
+            stu = student.Student(
+                sid="24111352",
+                user_info={
+                    "name": "顾宇浩",
+                    "mail": "yhgu2000@outlook.com",
+                },
+                codespace={
+                    "time_quota": 3600,
+                },
+            )
+            stu.reset_password("123456")
+            await student.TABLE.create(stu)
+
+            stu = student.Student(
+                sid="24111353",
+                user_info={
+                    "name": "顾宇浩clone1",
+                    "mail": "yhgu2001@outlook.com",
+                },
+                codespace={
+                    "time_quota": 3600,
+                },
+            )
+            stu.reset_password("1234567")
+            await student.TABLE.create(stu)
+
+        RUNNER.run(ado())
 
 
 
