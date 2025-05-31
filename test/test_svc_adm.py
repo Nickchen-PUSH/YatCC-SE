@@ -90,13 +90,35 @@ class Basic(unittest.TestCase):
     def tearDown(self) -> None:
         return
     
+    def _test_api_key(self, url, json, method):
+        n_resp = None
+        w_resp = None
+        match method:
+            case "GET":
+                n_resp = self.client.get(url)
+                w_resp = self.client.get(url, headers=self.wrong_header)
+            case "POST":
+                n_resp = self.client.post(url, json=json)
+                w_resp = self.client.post(url, json=json, headers=self.wrong_header)
+            case "PUT":
+                n_resp = self.client.put(url, json=json)
+                w_resp = self.client.put(url, json=json, headers=self.wrong_header)
+            case "DELETE":
+                n_resp = self.client.delete(url, json=json)
+                w_resp = self.client.delete(url, json=json, headers=self.wrong_header)
+            case "PATCH":
+                n_resp = self.client.patch(url, json=json)
+                w_resp = self.client.patch(url, json=json, headers=self.wrong_header)
+
+
+        self.assertEqual(n_resp.status_code, 401)
+        self.assertEqual(w_resp.status_code, 403)
+
+            
+
     def test_student_info(self):
-        # 测试不含有apikey获取学生信息
-        resp = self.client.get("/student/24111352")
-        self.assertEqual(resp.status_code, 401)
-        # 测试含有错误的apikey获取学生信息
-        resp = self.client.get("/student/24111352", headers=self.wrong_header)
-        self.assertEqual(resp.status_code, 403)
+        
+        self._test_api_key("/student/24111352", None, "GET")
         # 测试含有apikey获取学生信息
         resp = self.client.get("/student/24111352", headers=self.header)
         self.assertEqual(resp.status_code, 200)
@@ -108,12 +130,7 @@ class Basic(unittest.TestCase):
         self.assertEqual(resp.status_code, 404)
 
     def test_student_list(self):
-        # 测试不含有apikey获取学生列表
-        resp = self.client.get("/student")
-        self.assertEqual(resp.status_code, 401)
-        # 测试含有错误的apikey获取学生列表
-        resp = self.client.get("/student", headers=self.wrong_header)
-        self.assertEqual(resp.status_code, 403)
+        self._test_api_key("/student", None, "GET")
         # 测试含有apikey获取学生列表
         resp = self.client.get("/student", headers=self.header)
         self.assertEqual(resp.status_code, 200)
@@ -154,20 +171,7 @@ class Basic(unittest.TestCase):
             },
         ]
 
-        # 测试不含有apikey创建学生
-        resp = self.client.post(
-            "/student",
-            json=students,
-        )
-        self.assertEqual(resp.status_code, 401)
-
-        # 测试含有错误的apikey创建学生
-        resp = self.client.post(
-            "/student",
-            json=students,
-            headers=self.wrong_header,
-        )
-        self.assertEqual(resp.status_code, 403)
+        self._test_api_key("/student", students, "POST")
 
         # 测试含有apikey创建学生
         resp = self.client.post(
@@ -201,20 +205,8 @@ class Basic(unittest.TestCase):
                 "sid": "24111353",
             },
         ]
-        # 测试不含有apikey删除学生
-        resp = self.client.delete(
-            "/student",
-            json=delete_students,
-        )
-        self.assertEqual(resp.status_code, 401)
 
-        # 测试含有错误的apikey删除学生
-        resp = self.client.delete(
-            "/student",
-            json=delete_students,
-            headers=self.wrong_header,
-        )
-        self.assertEqual(resp.status_code, 403)
+        self._test_api_key("/student", delete_students, "DELETE")
 
         # 测试含有apikey删除学生
         resp = self.client.delete(
