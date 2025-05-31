@@ -7,9 +7,9 @@ import asyncio as aio
 import sys
 import traceback
 import time
-from cluster import create, JobParams, create_code_server_job, JobInfo
+from cluster import create, JobParams, JobInfo
 from base.logger import logger
-from config import ClusterConfig
+from config import CONFIG, ClusterConfig
 from .. import AsyncTestCase, RUNNER, setup_test, guard_once
 
 LOGGER = logger(__spec__, __file__)
@@ -117,7 +117,7 @@ async def ainit_kubernetes_cluster():
                 from cluster import create, ClusterConfig
 
                 config = ClusterConfig()
-                _KUBERNETES_CLUSTER = create(type="kubernetes", config=config)
+                _KUBERNETES_CLUSTER = create(type="kubernetes")
                 await _KUBERNETES_CLUSTER.initialize()
                 _KUBERNETES_CLUSTER._is_mock = False
             except Exception as k8s_error:
@@ -227,7 +227,7 @@ class ClusterTestBase(AsyncTestCase):
             async def cleanup_jobs():
                 for job_id in self.created_jobs:
                     try:
-                        await self.cluster.cleanup(job_id)
+                        await self.cluster.cleanup_resources(job_id)
                         LOGGER.debug(f"🧹 Cleaned up job: {job_id}")
                     except Exception as e:
                         LOGGER.warning(f"⚠️  Failed to cleanup job {job_id}: {e}")
@@ -244,24 +244,29 @@ class ClusterTestBase(AsyncTestCase):
         self.created_jobs.append(job_id)
         LOGGER.debug(f"📝 Tracking job for cleanup: {job_id}")
 
-    def create_test_job_params(self, name: str = "test-job", **kwargs) -> JobParams:
-        """创建测试用的作业参数"""
-        default_params = {
-            "name": f"{name}-{int(time.time() % 10000)}",
-            "image": "codercom/code-server:latest",
-            "ports": [8080],
-            "env": {"TEST": "true", "TIMESTAMP": str(int(time.time()))},
-            "user_id": kwargs.get("user_id", 1001),
-        }
-        default_params.update(kwargs)
-        return JobParams(**default_params)
-
-    def create_code_server_params(
-        self, user_id: int, workspace_name: str = None, **kwargs
+    def build_test_job_params(
+        self, user_id: int, **kwargs
     ) -> JobParams:
         """创建用户独立的 code-server 作业参数"""
-        return create_code_server_job(
-            user_id=user_id, workspace_name=workspace_name, **kwargs
+        return JobParams(
+            name=f"codespace-{user_id}",
+            image=CONFIG.CLUSTER.Codespace.IMAGE,
+            ports=[CONFIG.CLUSTER.Codespace.PORT],
+            env={
+                "PASSWORD": "123456",
+                "SUDO_PASSWORD": "123456",
+                **kwargs.get("env", {}),
+            },
+            user_id=user_id,
+            cpu_limit=kwargs.get(
+                "cpu_limit", CONFIG.CLUSTER.Codespace.DEFAULT_CPU_LIMIT
+            ),
+            memory_limit=kwargs.get(
+                "memory_limit", CONFIG.CLUSTER.Codespace.DEFAULT_MEMORY_LIMIT
+            ),
+            storage_size=kwargs.get(
+                "storage_size", CONFIG.CLUSTER.Codespace.DEFAULT_STORAGE_SIZE
+            ),
         )
 
     async def wait_for_job_status(self, job_id: str, target_status, timeout: int = 30):

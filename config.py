@@ -72,7 +72,7 @@ class ClusterConfig(Configuration):
         TIMEOUT = 30
     
     class Codespace(Configuration):
-        """code-server 专用配置"""
+        """code-server 配置"""
         IMAGE = "docker.io/codercom/code-server:latest"
         DEFAULT_PASSWORD = "student123"
         DEFAULT_CPU_LIMIT = "1000m"

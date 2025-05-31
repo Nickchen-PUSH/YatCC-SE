@@ -70,14 +70,9 @@ class KubernetesClusterTest(ClusterTestBase):
             LOGGER.info("🧪 Testing job creation and deployment status...")
 
             user_id = "2001"
-            job_params = self.create_code_server_params(
-                job_name=user_id,
+            job_params = self.build_test_job_params(
                 user_id=user_id,
-                memory_limit="512Mi",
-                cpu_limit="500m",
             )
-            # 重要：设置作业名称
-            job_params.name = str(user_id)
 
             LOGGER.info(f"📝 Creating job for user {user_id}...")
             job_info = await self.cluster.submit_job(job_params)
@@ -128,7 +123,7 @@ class KubernetesClusterTest(ClusterTestBase):
             job_name = str(user_id)  # 作业名称为用户ID
 
             # 第一次创建作业
-            job_params_1 = self.create_code_server_params(
+            job_params_1 = self.build_test_job_params(
                 user_id=user_id, workspace_name="workspace-1", memory_limit="256Mi"
             )
 
@@ -140,7 +135,7 @@ class KubernetesClusterTest(ClusterTestBase):
             await aio.sleep(1)
 
             # 第二次创建相同用户的作业（应该重用现有 deployment）
-            job_params_2 = self.create_code_server_params(
+            job_params_2 = self.build_test_job_params(
                 user_id=user_id, memory_limit="512Mi", env={"UPDATED": "true"}
             )
 
@@ -174,7 +169,7 @@ class KubernetesClusterTest(ClusterTestBase):
             user_id = "5001"
 
             # 创建测试作业
-            job_params = self.create_code_server_params(
+            job_params = self.build_test_job_params(
                 user_id=user_id,
                 memory_limit="256Mi",
                 env={"TEST_VAR": "original_value"},
@@ -227,7 +222,7 @@ class KubernetesClusterTest(ClusterTestBase):
             user_id = "3001"
 
             # 创建作业
-            job_params = self.create_code_server_params(user_id=user_id)
+            job_params = self.build_test_job_params(user_id=user_id)
 
             job_info = await self.cluster.submit_job(job_params)
             self.track_job(job_info.id)

@@ -115,10 +115,10 @@ async def main():
         # 2. 创建集群实例
         if args.mock:
             print("🎭 使用 Mock 集群...")
-            cluster = create("mock", config)
+            cluster = create("mock")
         else:
             print("🔧 使用 Kubernetes 集群...")
-            cluster = create("kubernetes", config)
+            cluster = create("kubernetes")
         
         # 3. 初始化集群
         print("🔧 初始化集群...")
