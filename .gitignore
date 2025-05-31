@@ -15,3 +15,6 @@ running/
 
 # cursor
 cursor-rules/
+
+# mac
+.DS_Store

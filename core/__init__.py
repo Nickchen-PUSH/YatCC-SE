@@ -41,7 +41,7 @@ async def ainit(
     os.makedirs(CONFIG.CORE.students_dir, mode=0o777, exist_ok=True)
     os.makedirs(CONFIG.CORE.archive_students_dir, mode=0o777, exist_ok=True)
 
-    CLUSTER = cluster.create(mock=cluster_mock)
+    CLUSTER = cluster.create(type="mock" if cluster_mock else "kubernetes")
 
 
 async def ready() -> bool:
