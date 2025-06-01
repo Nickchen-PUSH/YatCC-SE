@@ -867,15 +867,15 @@ class KubernetesCluster(ClusterABC):
                 name=job_name,
                 namespace=CONFIG.CLUSTER.Kubernetes.NAMESPACE,
             )
-
-            # 确定状态
-            if (
-                deployment.status.ready_replicas
-                and deployment.status.ready_replicas >= 1
-            ):
+            if not deployment:
+                raise JobNotFoundError(f"Job not found: {job_name}")
+            # 检查 Deployment 的状态
+            if deployment.status.ready_replicas and deployment.status.ready_replicas >= 1:
                 return JobInfo.Status.RUNNING
             elif deployment.status.unavailable_replicas:
                 return JobInfo.Status.FAILED
+            elif deployment.status.replicas == 0:
+                return JobInfo.Status.SUSPENDED
             else:
                 return JobInfo.Status.PENDING
         except ApiException as e:
@@ -904,6 +904,8 @@ class KubernetesCluster(ClusterABC):
                 status = JobInfo.Status.RUNNING
             elif deployment.status.unavailable_replicas:
                 status = JobInfo.Status.FAILED
+            elif deployment.status.replicas == 0:
+                status = JobInfo.Status.SUSPENDED
             else:
                 status = JobInfo.Status.PENDING
 
