@@ -1,3 +1,4 @@
+from enum import Enum
 import os
 from datetime import datetime
 from typing import AsyncIterator, cast
@@ -18,69 +19,18 @@ class UserInfo(BaseModel):
     mail: str = Field("", max_length=32, description="邮箱")
 
 
-class CodespaceInfo(BaseModel):
-    status: str = Field("stopped", description="代码空间状态")
-    url: str = Field("", description="代码空间URL")
+class CodespaceStatus(str, Enum):
+    """代码空间状态枚举"""
 
-    time_quota: int = Field(0, description="代码空间时间配额（秒）")
-    time_used: int = Field(0, description="代码空间已使用时间（秒）")
-
-    last_start: float = Field(0, description="代码空间最后启动的 POSIX 时间戳")
-    last_stop: float = Field(0, description="代码空间最后停止的 POSIX 时间戳")
-    last_active: float = Field(0, description="代码空间最后活动的 POSIX 时间戳")
-    last_watch: float = Field(0, description="代码空间最后检查的 POSIX 时间戳")
-
-
-class Student(BaseModel):
-    """学生信息模型"""
-
-    sid: str = Field(..., max_length=32, description="学号")
-    pwd_hash: str = Field("", description="密码哈希")
-
-    user_info: UserInfo = Field(default_factory=UserInfo, description="用户信息")
-    codespace: CodespaceInfo = Field(
-        default_factory=CodespaceInfo, description="代码空间信息"
-    )
-
-    def reset_password(self, new_password: str) -> None:
-        """重置密码"""
-        self.pwd_hash = generate_password_hash(new_password)
-
-    def check_password(self, password: str) -> bool:
-        """检查密码"""
-        return check_password_hash(self.pwd_hash, password)
-
-    def get_codespace_password(self) -> str:
-        """获取代码空间密码"""
-        from util import api_key_enc
-
-        return api_key_enc(self.sid)
-
-
-# ==================================================================================== #
-
-import os
-from datetime import datetime
-from typing import AsyncIterator, cast
-
-from pydantic import BaseModel, Field, RootModel
-from werkzeug.security import check_password_hash, generate_password_hash
-
-import cluster
-from base.logger import logger
-
-from . import Error
-
-LOGGERR = logger(__spec__, __file__)
-
-
-class UserInfo(BaseModel):
-    name: str = Field("", max_length=32, description="姓名")
-    mail: str = Field("", max_length=32, description="邮箱")
+    STOPPED = "stopped"
+    STARTING = "starting"
+    RUNNING = "running"
+    FAILED = "failed"
+    DELETED = "deleted"
 
 
 class CodespaceInfo(BaseModel):
-    status: str = Field("stopped", description="代码空间状态")
+    status: CodespaceStatus = Field(CodespaceStatus.STOPPED, description="代码空间状态")
     url: str = Field("", description="代码空间URL")
 
     time_quota: int = Field(0, description="代码空间时间配额（秒）")
@@ -303,6 +253,16 @@ class TABLE:
                 f"Student directory {stu_path} already exists, skipping creation"
             )
 
+        # 分配计算资源
+        try:
+            await CODESPACE.allocate(sid=stu.sid)
+        except Exception as e:
+            LOGGERR.error(f"Failed to allocate resources for student {stu.sid}: {e}")
+            raise Error(f"Failed to allocate resources for student {stu.sid}")
+
+        stu.codespace.status = CodespaceStatus.STOPPED
+        stu.codespace.url = ""
+
         ts = datetime.now().timestamp()
         stu.codespace.last_start = ts
         stu.codespace.last_stop = ts
@@ -326,8 +286,6 @@ class TABLE:
             return False
 
         # 归档代码空间
-
-        # 移动学生目录到归档目录
         stu_path = CONFIG.CORE.students_dir + sid + "/"
         if os.path.exists(stu_path):
             os.rename(
@@ -337,6 +295,13 @@ class TABLE:
                 + "_archived_"
                 + datetime.now().isoformat(),
             )
+
+        # 释放集群资源
+        try:
+            await CODESPACE.cleanup(sid)
+        except Exception as e:
+            LOGGERR.error(f"Failed to clean up codespace for student {sid}: {e}")
+            return False
 
         # 删除学生记录
         await DB_STU.delete(sid)
@@ -410,35 +375,24 @@ class CODESPACE:
                 raise CodespaceQuotaExceededError(sid)
 
             # 准备作业参数
-            job_params = cluster.JobParams(
-                name=f"codespace-{sid}",
-                image="codespace-base:latest",  # 使用默认的代码空间镜像
-                ports=[8080, 22],  # 默认映射Web端口和SSH端口
-                env={
-                    "STUDENT_ID": sid,
-                    "USER_NAME": student.user_info.name,
-                    "PASSWORD": student.get_codespace_password(),
-                },
-                user_id=sid,  # 添加必需的user_id字段
-            )
+            job_params = cls.build_job_params(sid)
 
             # 提交作业到集群
             LOGGERR.info(f"正在启动学生代码空间: {sid}")
+
+            student.codespace.status = "starting"
+
+            await TABLE.write(student)  # 更新状态为starting
+
             job_info = await CLUSTER.submit_job(job_params)
 
             # 更新代码空间信息
             now = datetime.now().timestamp()
             student.codespace.status = "running"
-            student.codespace.url = (
-                f"http://localhost:{job_info.ports[0]}"  # 使用第一个端口作为Web访问URL
-            )
+            student.codespace.url = job_info.service_url
             student.codespace.last_start = now
             student.codespace.last_active = now
-
-            # 将作业ID存储在Redis中，用于后续操作
-            from core import DB_STU
-
-            await DB_STU.set(f"{sid}:job_id", job_info.id)
+            student.codespace.last_watch = now
 
             # 保存更新后的学生信息
             await TABLE.write(student)
@@ -464,29 +418,21 @@ class CODESPACE:
     @classmethod
     async def stop(cls, sid: str) -> None:
         """停止代码空间"""
-        from core import CLUSTER, DB_STU
+        from core import CLUSTER
 
         try:
             # 获取学生信息
             student = await TABLE.read(sid)
+            job_param = cls.build_job_params(sid)
 
             # 如果代码空间已经停止，则无需操作
             if student.codespace.status == "stopped":
                 LOGGERR.info(f"代码空间已经停止: {sid}")
                 return
 
-            # 获取作业ID
-            job_id = await DB_STU.get(f"{sid}:job_id")
-            if not job_id:
-                LOGGERR.warning(f"找不到学生代码空间的作业ID: {sid}")
-                # 即使找不到作业ID，也更新状态为stopped
-                student.codespace.status = "stopped"
-                await TABLE.write(student)
-                return
-
             # 调用集群接口停止作业
-            LOGGERR.info(f"正在停止学生代码空间: {sid}, job_id: {job_id}")
-            await CLUSTER.delete_job(job_id)
+            LOGGERR.info(f"正在停止学生代码空间: {sid}, job_id: {job_param.name}")
+            await CLUSTER.delete_job(job_param.name)
 
             # 更新代码空间信息
             now = datetime.now().timestamp()
@@ -501,9 +447,6 @@ class CODESPACE:
                 LOGGERR.info(
                     f"代码空间使用时间更新: {sid}, +{int(used_time)}秒, 总计{student.codespace.time_used}秒"
                 )
-
-            # 删除Redis中存储的作业ID
-            await DB_STU.delete(f"{sid}:job_id")
 
             # 保存更新后的学生信息
             await TABLE.write(student)
@@ -526,28 +469,18 @@ class CODESPACE:
     @classmethod
     async def get_status(cls, sid: str) -> str:
         """获取代码空间状态"""
-        from core import CLUSTER, DB_STU
+        from core import CLUSTER
 
         try:
             # 获取学生信息
             student = await TABLE.read(sid)
+            job_param = cls.build_job_params(sid)
+            job_id = job_param.name
+            status = student.codespace.status
 
             # 如果数据库中记录的状态是stopped，直接返回
-            if student.codespace.status == "stopped":
-                return "stopped"
-
-            # 如果状态是running，检查作业实际状态
-            # 获取作业ID
-            job_id = await DB_STU.get(f"{sid}:job_id")
-            if not job_id:
-                # 没有作业ID但状态是running，说明数据不一致
-                LOGGERR.warning(
-                    f"代码空间状态不一致: {sid}, 状态为running但找不到作业ID"
-                )
-                # 更新状态为stopped
-                student.codespace.status = "stopped"
-                await TABLE.write(student)
-                return "stopped"
+            if status == "stopped":
+                return status
 
             try:
                 # 从集群获取作业状态
@@ -555,17 +488,21 @@ class CODESPACE:
 
                 # 映射集群作业状态到代码空间状态
                 if job_status == cluster.JobInfo.Status.RUNNING:
-                    return "running"
-                elif job_status == cluster.JobInfo.Status.PENDING:
-                    return "starting"
+                    status = "running"
+                elif job_status == cluster.JobInfo.Status.STARTING:
+                    status = "starting"
+                elif job_status == cluster.JobInfo.Status.SUSPENDED:
+                    status = "stopped"
+                elif job_status == cluster.JobInfo.Status.FAILED:
+                    LOGGERR.error(f"代码空间作业失败: {sid}, job_id: {job_id}")
+                    status = "failed"
                 else:
-                    # 作业已结束或失败，更新状态为stopped
-                    LOGGERR.info(
-                        f"代码空间作业已结束: {sid}, job_id: {job_id}, status: {job_status}"
-                    )
-                    student.codespace.status = "stopped"
-                    await TABLE.write(student)
-                    return "stopped"
+                    status = "pending"
+
+                # 更新学生代码空间状态
+                student.codespace.status = status
+                TABLE.write(student)
+                LOGGERR.info(f"获取代码空间状态成功: {sid}, 状态: {status}")
 
             except Exception as e:
                 # 获取作业状态失败，假设作业不存在或已停止
@@ -575,10 +512,6 @@ class CODESPACE:
                 student.codespace.status = "stopped"
                 await TABLE.write(student)
                 return "stopped"
-
-            # 返回数据库中记录的状态作为默认值
-            return student.codespace.status
-
         except StudentNotFoundError:
             LOGGERR.error(f"找不到学生: {sid}")
             raise
@@ -595,8 +528,6 @@ class CODESPACE:
             True: 代码空间正在启动中
             False: 代码空间已停止或不可用
         """
-        from core import DB_STU
-
         try:
             # 获取学生信息
             student = await TABLE.read(sid)
@@ -605,42 +536,28 @@ class CODESPACE:
             status = await cls.get_status(sid)
 
             if status == "stopped":
-                # 代码空间已停止，返回False
                 return False
             elif status == "starting":
-                # 代码空间正在启动，返回True
                 return True
             elif status == "running":
                 # 代码空间正在运行，返回URL
 
                 # 检查是否有存储的URL
-                if student.codespace.url and student.codespace.url.strip():
+                if student.codespace.url:
                     return student.codespace.url
 
-                # 尝试从作业ID构建URL
-                job_id = await DB_STU.get(f"{sid}:job_id")
-                if not job_id:
-                    LOGGERR.warning(
-                        f"代码空间状态不一致: {sid}, 状态为running但找不到作业ID"
-                    )
-                    return False
+                # 如果没有存储的URL，可能是集群状态不一致，尝试从集群获取
+                from core import CLUSTER
 
-                # 如果没有URL但有作业ID，使用存储的URL或构建一个默认URL
-                if not student.codespace.url or not student.codespace.url.strip():
-                    # 构造一个默认的URL，实际应用中应根据实际环境配置
-                    from config import CONFIG
-
-                    base_url = getattr(
-                        CONFIG.CORE, "codespace_base_url", "http://localhost"
-                    )
-                    port = 8080  # 默认端口
-                    student.codespace.url = f"{base_url}:{port}/codespace/{sid}"
+                job_param = cls.build_job_params(sid)
+                job_info = await CLUSTER.get_job_info(job_param.name)
+                if job_info.service_url:
+                    student.codespace.url = job_info.service_url
                     await TABLE.write(student)
-                    LOGGERR.info(
-                        f"为学生代码空间创建默认URL: {sid}, URL: {student.codespace.url}"
-                    )
-
-                return student.codespace.url
+                    return student.codespace.url
+                else:
+                    LOGGERR.warning(f"代码空间没有可用的URL: {sid}")
+                    return False
 
             else:
                 # 未知状态，返回False
@@ -654,8 +571,78 @@ class CODESPACE:
             LOGGERR.error(f"获取代码空间URL失败: {sid}, 错误: {e}")
             return False
 
-        # 默认情况返回False
-        return False
+    @classmethod
+    async def allocate(cls, sid: str, **kwargs) -> None:
+        """分配代码空间资源"""
+        from core import CLUSTER
+
+        try:
+            job_params = cls.build_job_params(sid, **kwargs)
+
+            # 分配计算资源
+            await CLUSTER.allocate_resources(job_params)
+            LOGGERR.info(f"代码空间资源分配成功: {sid}")
+
+        except Exception as e:
+            LOGGERR.error(f"分配代码空间资源失败: {sid}, 错误: {e}")
+            raise CodespaceStartError(sid, str(e))
+
+    @classmethod
+    async def cleanup(cls, sid: str) -> None:
+        """清理代码空间资源"""
+        from core import CLUSTER, DB_STU
+
+        try:
+            # 获取学生信息
+            student = await TABLE.read(sid)
+            student = await TABLE.read(sid)
+            job_params = cls.build_job_params(sid)
+            # 获取作业ID
+            job_id = job_params.name
+
+            # 调用集群接口清理资源
+            LOGGERR.info(f"正在清理学生代码空间资源: {sid}, job_id: {job_id}")
+            try:
+                await CLUSTER.cleanup_resources(job_id)
+            except cluster.ClusterError as e:
+                LOGGERR.error(f"清理代码空间资源失败: {sid}, 错误: {e}")
+            except:
+                LOGGERR.error(f"清理代码空间资源时发生未知错误: {sid}")
+            LOGGERR.info(f"学生代码空间资源清理成功: {sid}")
+        except StudentNotFoundError:
+            LOGGERR.error(f"找不到学生: {sid}")
+            raise
+        except Exception as e:
+            LOGGERR.error(f"清理学生代码空间资源失败: {sid}, 错误: {e}")
+
+    @classmethod
+    def build_job_params(cls, sid: str, **kwargs) -> cluster.JobParams:
+        """构建代码空间作业参数"""
+        from config import CONFIG
+        from util import api_key_enc
+
+        return cluster.JobParams(
+            name=f"codespace-{sid}",
+            image=CONFIG.CLUSTER.Codespace.IMAGE,
+            ports=[
+                cluster.PortParams(**port) for port in CONFIG.CLUSTER.Codespace.PORT
+            ],
+            env={
+                "PASSWORD": api_key_enc(sid),
+                "SUDO_PASSWORD": api_key_enc(sid),
+                **kwargs.get("env", {}),
+            },
+            user_id=sid,
+            cpu_limit=kwargs.get(
+                "cpu_limit", CONFIG.CLUSTER.Codespace.DEFAULT_CPU_LIMIT
+            ),
+            memory_limit=kwargs.get(
+                "memory_limit", CONFIG.CLUSTER.Codespace.DEFAULT_MEMORY_LIMIT
+            ),
+            storage_size=kwargs.get(
+                "storage_size", CONFIG.CLUSTER.Codespace.DEFAULT_STORAGE_SIZE
+            ),
+        )
 
     # 下面的先不实现
     @classmethod
