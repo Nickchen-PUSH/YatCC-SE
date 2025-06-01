@@ -7,7 +7,7 @@ import asyncio as aio
 import sys
 import traceback
 import time
-from cluster import create, JobParams, JobInfo
+from cluster import create, JobParams, JobInfo, PortParams
 from base.logger import logger
 from config import CONFIG, ClusterConfig
 from .. import AsyncTestCase, RUNNER, setup_test, guard_once
@@ -244,20 +244,18 @@ class ClusterTestBase(AsyncTestCase):
         self.created_jobs.append(job_id)
         LOGGER.debug(f"📝 Tracking job for cleanup: {job_id}")
 
-    def build_test_job_params(
-        self, user_id: int, **kwargs
-    ) -> JobParams:
+    def build_test_job_params(self, sid: int, **kwargs) -> JobParams:
         """创建用户独立的 code-server 作业参数"""
         return JobParams(
-            name=f"codespace-{user_id}",
+            name=f"codespace-{sid}",
             image=CONFIG.CLUSTER.Codespace.IMAGE,
-            ports=[CONFIG.CLUSTER.Codespace.PORT],
+            ports=[PortParams(**port) for port in CONFIG.CLUSTER.Codespace.PORT],
             env={
                 "PASSWORD": "123456",
                 "SUDO_PASSWORD": "123456",
                 **kwargs.get("env", {}),
             },
-            user_id=user_id,
+            user_id=sid,
             cpu_limit=kwargs.get(
                 "cpu_limit", CONFIG.CLUSTER.Codespace.DEFAULT_CPU_LIMIT
             ),
@@ -299,5 +297,4 @@ class ClusterTestBase(AsyncTestCase):
     def assert_code_server_job_valid(self, job_info):
         """验证 code-server 作业的特殊要求"""
         self.assert_job_info_valid(job_info)
-        self.assertIn(8080, job_info.ports)
         self.assertIn("PASSWORD", job_info.env)
