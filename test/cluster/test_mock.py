@@ -18,7 +18,7 @@ class MockClusterTest(ClusterTestBase):
         async def _test():
             user_id = "5001"
             job_params = self.build_test_job_params(
-                user_id=user_id,
+                sid=user_id,
                 workspace_name="test-workspace"
             )
             
@@ -40,7 +40,7 @@ class MockClusterTest(ClusterTestBase):
             jobs = []
             
             for user_id in user_ids:
-                job_params = self.build_test_job_params(user_id=user_id)
+                job_params = self.build_test_job_params(sid=user_id)
                 job_info = await self.cluster.submit_job(job_params)
                 jobs.append(job_info)
                 self.track_job(job_info.id)
@@ -61,8 +61,8 @@ class MockClusterTest(ClusterTestBase):
             user2_id = "5011"
             
             # 创建两个用户的作业
-            job1_params = self.build_test_job_params(user_id=user1_id)
-            job2_params = self.build_test_job_params(user_id=user2_id)
+            job1_params = self.build_test_job_params(sid=user1_id)
+            job2_params = self.build_test_job_params(sid=user2_id)
             
             job1_info = await self.cluster.submit_job(job1_params)
             job2_info = await self.cluster.submit_job(job2_params)

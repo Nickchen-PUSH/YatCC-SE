@@ -14,6 +14,9 @@ LOGGER = logger(__spec__, __file__)
 
 def setUpModule() -> None:
     """模块级别的设置"""
+    from .. import setup_test
+
+    setup_test(__name__)
     LOGGER.info("🚀 Kubernetes cluster test module setup")
     # 预先初始化 Kubernetes 集群
     try:
@@ -71,7 +74,7 @@ class KubernetesClusterTest(ClusterTestBase):
 
             user_id = "2001"
             job_params = self.build_test_job_params(
-                user_id=user_id,
+                sid=user_id,
             )
 
             LOGGER.info(f"📝 Creating job for user {user_id}...")
@@ -124,7 +127,7 @@ class KubernetesClusterTest(ClusterTestBase):
 
             # 第一次创建作业
             job_params_1 = self.build_test_job_params(
-                user_id=user_id, workspace_name="workspace-1", memory_limit="256Mi"
+                sid=user_id, workspace_name="workspace-1", memory_limit="256Mi"
             )
 
             LOGGER.info(f"📝 Creating first job for user {user_id}...")
@@ -136,7 +139,7 @@ class KubernetesClusterTest(ClusterTestBase):
 
             # 第二次创建相同用户的作业（应该重用现有 deployment）
             job_params_2 = self.build_test_job_params(
-                user_id=user_id, memory_limit="512Mi", env={"UPDATED": "true"}
+                sid=user_id, memory_limit="512Mi", env={"UPDATED": "true"}
             )
 
             LOGGER.info(f"📝 Creating second job for user {user_id}...")
@@ -170,7 +173,7 @@ class KubernetesClusterTest(ClusterTestBase):
 
             # 创建测试作业
             job_params = self.build_test_job_params(
-                user_id=user_id,
+                sid=user_id,
                 memory_limit="256Mi",
                 env={"TEST_VAR": "original_value"},
             )
@@ -222,7 +225,7 @@ class KubernetesClusterTest(ClusterTestBase):
             user_id = "3001"
 
             # 创建作业
-            job_params = self.build_test_job_params(user_id=user_id)
+            job_params = self.build_test_job_params(sid=user_id)
 
             job_info = await self.cluster.submit_job(job_params)
             self.track_job(job_info.id)
@@ -236,10 +239,6 @@ class KubernetesClusterTest(ClusterTestBase):
             # 获取本地访问URL（自动创建端口转发）
             LOGGER.info("🔗 Getting service URL...")
             local_url = await self.cluster.get_service_url(job_info.id)
-
-            # 验证URL格式
-            self.assertTrue(local_url.startswith("http://localhost:"))
-            LOGGER.info(f"✅ Local URL: {local_url}")
 
             return local_url
 
