@@ -20,6 +20,7 @@ from . import (
     JobInfo,
     ClusterError,
     JobNotFoundError,
+    PortParams,
 )
 
 LOGGER = logger(__spec__, __file__)
@@ -41,6 +42,10 @@ class KubernetesSpec:
                 "name": self.job_params.name,
                 "labels": self._build_labels(),
                 "namespace": CONFIG.CLUSTER.Kubernetes.NAMESPACE,
+                "annotations": {
+                    "yatcc-se/suspended": "true",
+                    "yatcc-se/original-replicas": "1",  # 默认副本数为 1
+                },
             },
             "spec": self._build_spec(),
         }
@@ -57,21 +62,15 @@ class KubernetesSpec:
             },
             "spec": {
                 "selector": {"app": self.job_params.name, **self._build_labels()},
-                "ports": [
-                    {
-                        "port": CONFIG.CLUSTER.Codespace.PORT,
-                        "targetPort": CONFIG.CLUSTER.Codespace.PORT,
-                        "protocol": "TCP",
-                        "name": "http",
-                    }
-                ],
+                "ports": CONFIG.CLUSTER.Codespace.PORT,
                 "type": "NodePort",
             },
         }
 
     def _build_spec(self) -> Dict[str, Any]:
         return {
-            "replicas": 1,
+            # 默认副本数为 0，在创建时不会自动启动
+            "replicas": 0,
             "selector": {"matchLabels": {"app": self.job_params.name}},
             "template": {
                 "metadata": {
@@ -92,7 +91,10 @@ class KubernetesSpec:
         return {
             "name": "code-server",
             "image": self.job_params.image,
-            "ports": [{"containerPort": CONFIG.CLUSTER.Codespace.PORT}],
+            "ports": [
+                {"containerPort": item.port, "name": item.name}
+                for item in self.job_params.ports
+            ],
             "env": [{"name": k, "value": v} for k, v in self.job_params.env.items()],
             "args": [
                 "--bind-addr=0.0.0.0:8080",
@@ -114,12 +116,11 @@ class KubernetesSpec:
         ]
 
     def _build_volumes(self) -> List[Dict[str, Any]]:
-        base_path = f"{CONFIG.CORE.students_dir}/{self.job_params.user_id}"
         return [
             {
                 "name": name,
                 "hostPath": {
-                    "path": f"{base_path}/{name}",
+                    "path": f"{CONFIG.CORE.students_dir}/{self.job_params.user_id}/{name}",
                     "type": "DirectoryOrCreate",
                 },
             }
@@ -139,7 +140,7 @@ class KubernetesSpec:
 
     def _build_probe(self, initial_delay: int = 30, period: int = 10) -> Dict[str, Any]:
         return {
-            "httpGet": {"path": "/", "port": CONFIG.CLUSTER.Codespace.PORT},
+            "httpGet": {"path": "/", "port": 8080},  # HTTP 健康检查路径
             "initialDelaySeconds": initial_delay,
             "periodSeconds": period,
         }
@@ -232,18 +233,16 @@ class KubernetesCluster(ClusterABC):
             await self._create_service(job_params)
             LOGGER.info(f"Created Service for Deployment: {job_params.name}")
 
-            service_url = await self.get_service_url(job_params.name)
-
             return JobInfo(
                 id=job_params.name,
                 name=job_params.name,
                 image=job_params.image,
                 ports=job_params.ports,
                 env=job_params.env,
-                status=JobInfo.Status.RUNNING,
+                status=JobInfo.Status.SUSPENDED,
                 created_at=datetime.now().isoformat(),
                 namespace=CONFIG.CLUSTER.Kubernetes.NAMESPACE,
-                service_url=service_url,
+                service_url="",
                 user_id=job_params.user_id,
             )
 
@@ -277,17 +276,17 @@ class KubernetesCluster(ClusterABC):
             existing_job = job_name
 
         if existing_job:
-            return await self._resume_user_deployment(existing_job, job_params)
+            return await self._resume_user_deployment(job_params)
         else:
             LOGGER.info(
                 "No existing deployment found for user {job_params.user_id}, creating a new one."
             )
-            return await self.allocate_resources(job_params)
+            await self.allocate_resources(job_params)
+            return await self._resume_user_deployment(job_params)
 
-    async def _resume_user_deployment(
-        self, job_name: str, job_params: JobParams
-    ) -> JobInfo:
+    async def _resume_user_deployment(self, job_params: JobParams) -> JobInfo:
         """恢复用户的 Deployment"""
+        job_name = job_params.name
         try:
             deployment = await aio.to_thread(
                 self.apps_v1.read_namespaced_deployment,
@@ -328,7 +327,7 @@ class KubernetesCluster(ClusterABC):
             await self._update_deploy_spec(job_params)
 
             # 确保 Service 存在
-            service_url = await self._check_service(job_params)
+            service = await self._check_service(job_params)
 
             # 再次读取最新的 deployment 状态
             final_deployment = await aio.to_thread(
@@ -354,11 +353,20 @@ class KubernetesCluster(ClusterABC):
             user_id = labels.get("user-id", 0)
             if user_id is not None:
                 user_id = str(user_id)
+            service_url = await self.get_service_url(job_name)
+            ports = [
+                PortParams(
+                    name=item.name,
+                    port=item.port,
+                    target_port=item.target_port,
+                )
+                for item in service.spec.ports
+            ]
             return JobInfo(
                 id=final_deployment.metadata.name,
                 name=final_deployment.metadata.name,
                 image=container.image,
-                ports=[CONFIG.CLUSTER.Codespace.PORT],
+                ports=ports,
                 env={env_var.name: env_var.value for env_var in (container.env or [])},
                 status=status,
                 created_at=(
@@ -408,9 +416,7 @@ class KubernetesCluster(ClusterABC):
                 # 恢复副本数
                 deployment.spec.replicas = original_replicas
                 LOGGER.info(f"Setting replicas to: {original_replicas}")
-
-                # 🎯 关键修复：确保注解被完全删除
-                # 创建新的注解字典，排除暂停相关的注解
+                # 移除暂停注解
                 new_annotations = {}
                 for key, value in annotations.items():
                     if key not in ["yatcc-se/suspended", "yatcc-se/original-replicas"]:
@@ -512,8 +518,8 @@ class KubernetesCluster(ClusterABC):
         )
         return False
 
-    async def _check_service(self, job_params: JobParams) -> str:
-        """确保 Service 存在"""
+    async def _check_service(self, job_params: JobParams):
+        """确保 Service 存在，如果不存在则创建它，返回 Service 对象"""
         svc_name = job_params.name + "-svc"
 
         try:
@@ -524,7 +530,7 @@ class KubernetesCluster(ClusterABC):
             )
 
             # Service 存在，返回 URL
-            return f"http://{service.metadata.name}.{service.metadata.namespace}.svc.cluster.local:{service.spec.ports[0].port}"
+            return service
 
         except ApiException as e:
             if e.status == 404:
@@ -534,7 +540,7 @@ class KubernetesCluster(ClusterABC):
             raise ClusterError(f"Failed to check service: {e}")
 
     async def _create_service(self, job_params: JobParams) -> str:
-        """创建 Service，返回内部集群 URL"""
+        """创建 Service，返回 Service 对象"""
         service_spec = KubernetesSpec(job_params)._build_service()
         svc_name = service_spec["metadata"]["name"]
         service = await aio.to_thread(
@@ -546,10 +552,7 @@ class KubernetesCluster(ClusterABC):
         node_port = service.spec.ports[0].node_port
         service.nodeport = node_port
 
-        # 返回内部集群 URL
-        service_url = f"http://{svc_name}.{CONFIG.CLUSTER.Kubernetes.NAMESPACE}.svc.cluster.local:{CONFIG.CLUSTER.Codespace.PORT}"
-        LOGGER.info(f"Created Service: {svc_name}, Internal URL: {service_url}")
-        return service_url
+        return service
 
     async def get_service_url(self, job_name: str) -> str:
         """获取指定作业的服务访问 URL - 创建端口转发并返回本地 URL"""
@@ -575,24 +578,30 @@ class KubernetesCluster(ClusterABC):
                     # 清理无效的端口转发
                     del self._port_forwards[job_name]
 
-            # 创建新的端口转发
-            local_port = self._get_available_local_port()
-            target_port = service.spec.ports[0].port
-
-            # 使用 kubectl port-forward 创建端口转发
-            success = await self._create_kubectl_port_forward(
-                job_name=job_name, local_port=local_port, target_port=target_port
-            )
-
-            if success:
-                local_url = f"http://localhost:{local_port}"
-                LOGGER.info(
-                    f"Created port forward for {job_name}: {local_url} -> {target_port}"
+            service_url = ""
+            target_port_list = service.spec.ports
+            for item in target_port_list:
+                local_port = self._get_available_local_port()
+                success = await self._create_kubectl_port_forward(
+                    job_name=job_name,
+                    local_port=local_port,
+                    target_port=item.port,
                 )
-                return local_url
-            else:
-                raise ClusterError(f"Failed to create port forward for {job_name}")
-
+                if not success:
+                    LOGGER.error(
+                        f"Failed to create port forward for {job_name} on port {item.port}"
+                    )
+                    continue
+                if item.name == "http":
+                    service_url = f"http://localhost:{local_port}"
+                LOGGER.info(
+                    f"Created port forward for {job_name} on port {item.port}: http://localhost:{local_port}"
+                )
+            if not service_url:
+                raise ClusterError(
+                    f"Failed to create port forward for {job_name}, no valid HTTP port found"
+                )
+            return service_url
         except ApiException as e:
             if e.status == 404:
                 raise JobNotFoundError(f"Service not found for job: {job_name}")
@@ -906,7 +915,7 @@ class KubernetesCluster(ClusterABC):
                     name=f"{job_name}-svc",
                     namespace=CONFIG.CLUSTER.Kubernetes.NAMESPACE,
                 )
-                service_url = f"http://{service.metadata.name}.{service.metadata.namespace}.svc.cluster.local:{CONFIG.CLUSTER.Codespace.PORT}"
+                service_url = await self.get_service_url(job_name)
             except ApiException:
                 pass
 
@@ -914,11 +923,20 @@ class KubernetesCluster(ClusterABC):
             if user_id is not None:
                 user_id = str(user_id)
 
+            ports = [
+                PortParams(
+                    name=item.name,
+                    port=item.port,
+                    target_port=item.target_port,
+                )
+                for item in service.spec.ports
+            ]
+
             return JobInfo(
                 id=deployment.metadata.name,
                 name=deployment.metadata.name,
                 image=container.image,
-                ports=[CONFIG.CLUSTER.Codespace.PORT],
+                ports=ports,
                 env={env_var.name: env_var.value for env_var in (container.env or [])},
                 status=status,
                 created_at=(

@@ -17,12 +17,22 @@ from base import guard_ainit
 logger = logging.getLogger(__name__)
 
 
+class PortParams(BaseModel):
+    """端口参数"""
+
+    port: int = Field(..., description="端口号")
+    target_port: Optional[int] = Field(None, description="目标端口")
+    name: Optional[str] = Field(None, description="端口名称")
+    protocol: str = Field(default="TCP", description="协议类型，默认为 TCP")
+    node_port: Optional[int] = Field(None, description="节点端口（用于 NodePort 服务）")
+
+
 class JobParams(BaseModel):
     """作业参数"""
 
     name: str = Field(..., description="作业名称")
     image: str = Field(default="codercom/code-server:latest", description="镜像名称")
-    ports: List[int] = Field(default_factory=lambda: [8080], description="端口映射")
+    ports: List[PortParams] = Field(default_factory=list, description="端口映射列表")
     env: Dict[str, str] = Field(default_factory=dict, description="环境变量")
 
     # 资源限制
@@ -40,7 +50,7 @@ class JobInfo(BaseModel):
     id: str = Field(..., description="作业ID")
     name: str = Field(..., description="作业名称")
     image: str = Field(..., description="镜像名称")
-    ports: List[int] = Field(default_factory=list, description="端口映射")
+    ports: List[PortParams] = Field(default_factory=list, description="端口映射列表")
     env: Dict[str, str] = Field(default_factory=dict, description="环境变量")
     status: int = Field(..., description="作业状态")
 
@@ -56,8 +66,15 @@ class JobInfo(BaseModel):
         PENDING = 0
         RUNNING = 1
         FAILED = 2
+        SUSPENDED = 3
+        STARTING = 4
 
-
+def _read_port_config() -> List[PortParams]:
+    """读取端口配置"""
+    ports = []
+    for port in CONFIG.CLUSTER.Codespace.PORTS:
+        ports.append(PortParams(**port))
+    return ports
 class ClusterABC(ABC):
     """集群接口基类"""
 
@@ -140,4 +157,3 @@ def create(type: str = "mock") -> ClusterABC:
         return KubernetesCluster()
     else:
         raise ValueError(f"Unsupported cluster type: {type}")
-
