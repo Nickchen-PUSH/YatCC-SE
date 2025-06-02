@@ -256,7 +256,7 @@ _TAG_CODESPACE = Tag(name="codespace", description="代码空间")
 async def codespace():
     """进入代码空间（重定向）"""
     # pass    #TODO
-    account=check_api_key()
+    account=await check_api_key()
     space_status=await core.student.CODESPACE.get_status(account)
     url=await core.student.CODESPACE.get_url(account)
 

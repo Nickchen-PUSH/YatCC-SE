@@ -60,12 +60,12 @@ class MockCluster(ClusterABC):
         )
 
         # 存储作业
-        self._jobs[job_id] = job_info
+        self._jobs[job_params.name] = job_info
 
         # 模拟异步启动
-        aio.create_task(self._simulate_job_lifecycle(job_id))
+        aio.create_task(self._simulate_job_lifecycle(job_params.name))
 
-        logger.info(f"Mock code-server job submitted: {job_id}")
+        logger.info(f"Mock code-server job submitted: {job_params.name}")
         return job_info
 
     async def submit_job(self, job_params: JobParams) -> JobInfo:
@@ -94,17 +94,17 @@ class MockCluster(ClusterABC):
         )
 
         # 存储作业
-        self._jobs[job_id] = job_info
+        self._jobs[job_params.name] = job_info
 
         # 模拟异步启动
-        aio.create_task(self._simulate_job_lifecycle(job_id))
+        aio.create_task(self._simulate_job_lifecycle(job_params.name))
 
-        logger.info(f"Mock code-server job submitted: {job_id}")
+        logger.info(f"Mock code-server job submitted: {job_params.name}")
         return job_info
 
     async def _simulate_job_lifecycle(self, job_id: str):
         """模拟作业生命周期"""
-        await aio.sleep(3)  # 模拟启动延迟
+        await aio.sleep(0.003)  # 模拟启动延迟
 
         if job_id in self._jobs:
             self._jobs[job_id].status = JobInfo.Status.RUNNING
