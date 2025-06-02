@@ -86,8 +86,8 @@ class Basic(unittest.TestCase):
     def setUp(self) -> None:
         global WSGI
         self.client = WSGI.test_client()
-        self.header = {"X-API-KEY": {"123456"}}
-        self.wrong_header = {"X-API-KEY": {"wrong_key"}}
+        self.header = {"ADM-API-KEY": {"123456"}}
+        self.wrong_header = {"ADM-API-KEY": {"wrong_key"}}
 
     def tearDown(self) -> None:
         return
@@ -150,25 +150,17 @@ class Basic(unittest.TestCase):
 
         students = [
             {
-                "sid": "24111355",
-                "user_info": {
-                    "name": "顾宇浩clone3",
-                    "mail": "yhgu2003@outlook.com",
-                },
-                "codespace": {
-                    "time_quota": 3600,
-                },
+                "id": "24111355",
+                "name": "顾宇浩clone3",
+                "mail": "yhgu2003@outlook.com",
+                "time_quota": 3600,
                 "pwd": "12345678",
             },
             {
-                "sid": "24111356",
-                "user_info": {
-                    "name": "顾宇浩clone4",
-                    "mail": "yhgu2004@outlook.com",
-                },
-                "codespace": {
-                    "time_quota": 3600,
-                },
+                "id": "24111356",
+                "name": "顾宇浩clone4",
+                "mail": "yhgu2004@outlook.com",
+                "time_quota": 3600,
                 "pwd": "12345678",
             },
         ]

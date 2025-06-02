@@ -72,7 +72,7 @@ async def check_api_key():
     if api_key is None:
         api_key = request.args.get("ADM-API-KEY")
 
-    if not api_key == await admin.API_KEY.get():
+    if api_key is None:
         raise ErrorResponse(
             Response(
                 "UNAUTHORIZED: please set the 'ADM-API-KEY'"
@@ -80,6 +80,15 @@ async def check_api_key():
                 status=401,
             )
         )
+
+    if not api_key == await admin.API_KEY.get():
+        raise ErrorResponse(
+            Response(
+                "FORBIDDEN: incorrect API-KEY",
+                status=403,
+            )
+        )
+
 
 
 _CHECK_API_KEY_RESPONSES = {
@@ -132,9 +141,10 @@ class StudentDetail(StudentBrief):
             last_watch=stu.codespace.last_watch,
         )
 
-
+class DetailPath(BaseModel):
+    sid: str = student.Student.model_fields["sid"]
 @WSGI.get(
-    "/student/<id>",
+    "/student/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {
@@ -147,14 +157,14 @@ class StudentDetail(StudentBrief):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_detail(id: str):
+async def student_detail(path: DetailPath):
     """获取学生详细信息"""
     await check_api_key()
     try:
-        student_data = await student.TABLE.read(id)
+        student_data = await student.TABLE.read(path.sid)
     except student.StudentNotFoundError:
         raise ErrorResponse(Response("Student not found", status=404))
-    return 200, StudentDetail.from_student(student_data)
+    return StudentDetail.from_student(student_data).model_dump(), 200
 
 
 @WSGI.get(
@@ -177,7 +187,13 @@ async def student_detail(id: str):
 )
 async def student_list():
     """获取学生列表"""
-    pass
+    await check_api_key()
+    students = [
+        StudentBrief.from_student(stu).model_dump()
+        async for stu in student.TABLE.iter_all()
+    ]
+    
+    return students, 200
 
 
 class StudentCreate(StudentBrief):
@@ -232,10 +248,10 @@ async def create_student(body: RootModel[list[StudentCreate]]):
             )
             stu.reset_password(stu_data.pwd)
             await student.TABLE.create(stu)
-            success.append(StudentBrief.from_student(stu))
+            success.append(StudentBrief.from_student(stu).model_dump())
         except Exception as e:
             failed.append({"id": stu.sid, "reason": str(e)})
-    return 200, {
+    return {
         "success": success,
         "failed": failed,
     }
@@ -246,7 +262,7 @@ async def create_student(body: RootModel[list[StudentCreate]]):
 
 # 批量删除学生API
 class StudentDelete(BaseModel):
-    id: str = Field(..., description="学生ID")
+    sid: str = Field(..., description="学生ID")
 
 
 @WSGI.delete(
