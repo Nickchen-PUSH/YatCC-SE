@@ -8,7 +8,7 @@ from base import PROJECT_DIR, Configuration, timetag
 
 
 class Environ(Configuration):
-    mock_cluster = True
+    mock_cluster = False
 
     EXECUTABLE: type["Executable"]
     """外部可执行程序"""
@@ -18,6 +18,10 @@ ENVIRON = Environ
 
 
 class Executable(Configuration):
+    rm = "/bin/rm"
+    cp = "/bin/cp"
+    wget = "/opt/homebrew/bin/wget"
+    docker = "/usr/local/bin/docker"
     redis_server = "/opt/homebrew/bin/redis-server"
 
 
