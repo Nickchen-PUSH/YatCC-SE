@@ -8,7 +8,7 @@ from base import PROJECT_DIR, Configuration, timetag
 
 
 class Environ(Configuration):
-    mock_cluster = True
+    mock_cluster = False
 
     EXECUTABLE: type["Executable"]
     """外部可执行程序"""
@@ -18,7 +18,7 @@ ENVIRON = Environ
 
 
 class Executable(Configuration):
-    redis_server = "/opt/homebrew/bin/redis-server"
+    redis_server = "/usr/bin/redis-server"
 
 
 ENVIRON.EXECUTABLE = Executable
@@ -73,7 +73,7 @@ class ClusterConfig(Configuration):
     DEFAULT_TYPE = "mock"
 
     class Kubernetes(Configuration):
-        NAMESPACE = "default"
+        NAMESPACE = "yatcc-test"
         KUBECONFIG_PATH = None
         TIMEOUT = 30
 
