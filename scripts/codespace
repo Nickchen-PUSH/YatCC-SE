@@ -1,0 +1,83 @@
+"""CODESPACE 项目工具"""
+
+from argparse import ArgumentParser
+
+argp = ArgumentParser(description=__doc__)
+argps = argp.add_subparsers(dest="subcmd")
+argp_build = argps.add_parser("build", help="执行构建")
+
+argp_run = argps.add_parser("run", help="运行构建出的镜像")
+argp_run.add_argument(
+    "--code-server", type=int, default=6443, help="指定 code-server 端口"
+)
+argp_run.add_argument("--io", help="指定 /io 挂载目录")
+argp_run.add_argument("--root", help="指定 /root 挂载目录")
+argp_run.add_argument("--code", help="指定 /code 挂载目录")
+
+argp_run.add_argument("args", nargs="*", help="传递给容器的参数")
+
+
+ARGS = argp.parse_args()
+ARG_SUBCMD: str = ARGS.subcmd
+if ARG_SUBCMD is None:
+    argp.print_help()
+    exit(1)
+
+# ==================================================================================== #
+
+import os
+import sys
+
+sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.."))
+
+import base
+from run import __run__
+
+RUNNING_DIR, LOGGER, PROGRESS = __run__(
+    __spec__, __file__, time_tree=ARG_SUBCMD not in {"dev", "run"}
+)
+
+# ==================================================================================== #
+
+async def _build() -> int:
+    from run.codespace import build
+
+    await build()
+    return 0
+
+
+def _run() -> int:
+    from run.codespace import run
+
+    ARG_SSHD: int = 22
+    ARG_CODE_SERVER: int = ARGS.code_server
+    ARG_IO: str | None = ARGS.io
+    ARG_ROOT: str | None = ARGS.root
+    ARG_CODE: str | None = ARGS.code
+    ARG_ARGS: list[str] = ARGS.args
+
+    if ARG_IO is None:
+        io_dir = RUNNING_DIR / "io"
+    else:
+        io_dir = base.Path(ARG_IO)
+    if ARG_ROOT is None:
+        root_dir = RUNNING_DIR / "root"
+    else:
+        root_dir = base.Path(ARG_ROOT)
+    if ARG_CODE is None:
+        code_dir = RUNNING_DIR / "code"
+    else:
+        code_dir = base.Path(ARG_CODE)
+    io_dir.mkdir(parents=True, exist_ok=True)
+    root_dir.mkdir(parents=True, exist_ok=True)
+    code_dir.mkdir(parents=True, exist_ok=True)
+    return run(ARG_SSHD, ARG_CODE_SERVER, io_dir, root_dir, code_dir, *ARG_ARGS)
+
+if ARG_SUBCMD == "run":
+    exit(_run())
+else:
+    base.RUNNER.run(
+        {
+            "build": _build,
+        }[ARG_SUBCMD]()
+    )

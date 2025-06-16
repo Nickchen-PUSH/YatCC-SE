@@ -1,0 +1,30 @@
+FROM ubuntu:24.04 AS base
+
+COPY codespace/install-retry /usr/local/bin/install-retry
+RUN chmod +x /usr/local/bin/install-retry
+
+RUN apt-get update
+RUN install-retry python3 openssh-server openssl lsof && \
+    apt-get autoremove -y && \
+    apt-get clean -y
+
+FROM base AS code-server
+COPY codespace/setup.sh code-server.deb cpptools-linux-x64.vsix /tmp/
+RUN bash /tmp/setup.sh
+
+FROM code-server AS app
+RUN install-retry \
+    bison flex libssl-dev \
+    nasm cmake libncurses5-dev \
+    gcc gdb
+RUN install-retry qemu-system-common qemu-system-misc
+RUN install-retry qemu-system
+# ARM
+RUN install-retry libc6-dev-i386-cross
+COPY codespace/CODESPACE /CODESPACE
+COPY service.tgz /tmp
+WORKDIR /app
+RUN tar -xzf /tmp/service.tgz && \
+    rm -rf /tmp/*
+
+ENTRYPOINT [ "/bin/python3", "/CODESPACE" ]

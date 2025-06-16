@@ -18,7 +18,11 @@ ENVIRON = Environ
 
 
 class Executable(Configuration):
-    redis_server = "/usr/bin/redis-server"
+    rm = "/bin/rm"
+    cp = "/bin/cp"
+    wget = "/opt/homebrew/bin/wget"
+    docker = "/usr/local/bin/docker"
+    redis_server = "/opt/homebrew/bin/redis-server"
 
 
 ENVIRON.EXECUTABLE = Executable
