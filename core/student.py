@@ -478,8 +478,8 @@ class CODESPACE:
             job_id = job_param.name
             status = student.codespace.status
 
-            # 如果数据库中记录的状态是stopped，直接返回
-            if status == "stopped":
+            # 如果数据库中记录的状态是stopped或None，直接返回
+            if status == "stopped" or status is None:
                 return status
 
             try:
@@ -501,8 +501,11 @@ class CODESPACE:
 
                 # 更新学生代码空间状态
                 student.codespace.status = status
-                TABLE.write(student)
+                await TABLE.write(student)
                 LOGGERR.info(f"获取代码空间状态成功: {sid}, 状态: {status}")
+
+                # 确保函数返回最新状态
+                return status
 
             except Exception as e:
                 # 获取作业状态失败，假设作业不存在或已停止
@@ -512,6 +515,7 @@ class CODESPACE:
                 student.codespace.status = "stopped"
                 await TABLE.write(student)
                 return "stopped"
+            
         except StudentNotFoundError:
             LOGGERR.error(f"找不到学生: {sid}")
             raise
@@ -550,15 +554,31 @@ class CODESPACE:
                 from core import CLUSTER
 
                 job_param = cls.build_job_params(sid)
-                job_info = await CLUSTER.get_job_info(job_param.name)
-                if job_info.service_url:
-                    student.codespace.url = job_info.service_url
-                    await TABLE.write(student)
-                    return student.codespace.url
-                else:
-                    LOGGERR.warning(f"代码空间没有可用的URL: {sid}")
-                    return False
-
+                try:
+                    job_info = await CLUSTER.get_job_info(job_param.name)
+                    if job_info.service_url:
+                        student.codespace.url = job_info.service_url
+                        await TABLE.write(student)
+                        return student.codespace.url
+                    else:
+                        LOGGERR.warning(f"代码空间没有可用的URL: {sid}")
+                        # 继续尝试，不立即返回False
+                except Exception as e:
+                    LOGGERR.warning(f"获取代码空间作业信息失败: {sid}, 错误: {e}")
+                    # 继续尝试其他方法获取URL
+                
+                # 最后一次尝试：重新从数据库获取学生信息，以防URL已更新
+                try:
+                    updated_student = await TABLE.read(sid)
+                    if updated_student.codespace.url:
+                        LOGGERR.info(f"从数据库获取到最新URL: {updated_student.codespace.url}")
+                        return updated_student.codespace.url
+                except Exception as e:
+                    LOGGERR.warning(f"重新读取学生信息失败: {sid}, 错误: {e}")
+                
+                # 所有尝试都失败，返回False
+                return False
+                
             else:
                 # 未知状态，返回False
                 LOGGERR.warning(f"未知的代码空间状态: {sid}, status: {status}")
