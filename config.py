@@ -18,7 +18,11 @@ ENVIRON = Environ
 
 
 class Executable(Configuration):
-    redis_server = "/usr/bin/redis-server"
+    rm = "/bin/rm"
+    cp = "/bin/cp"
+    wget = "/opt/homebrew/bin/wget"
+    docker = "/usr/local/bin/docker"
+    redis_server = "/opt/homebrew/bin/redis-server"
 
 
 ENVIRON.EXECUTABLE = Executable
@@ -73,7 +77,7 @@ class ClusterConfig(Configuration):
     DEFAULT_TYPE = "mock"
 
     class Kubernetes(Configuration):
-        NAMESPACE = "yatcc-test"
+        NAMESPACE = "default"
         KUBECONFIG_PATH = None
         TIMEOUT = 30
 

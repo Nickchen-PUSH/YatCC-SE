@@ -279,7 +279,7 @@ class KubernetesCluster(ClusterABC):
             return await self._resume_user_deployment(job_params)
         else:
             LOGGER.info(
-                "No existing deployment found for user {job_params.user_id}, creating a new one."
+                f"No existing deployment found for user {job_params.user_id}, creating a new one."
             )
             await self.allocate_resources(job_params)
             return await self._resume_user_deployment(job_params)
