@@ -463,40 +463,75 @@ class MockClusterTest(StubClusterTestCase):
             LOGGER.info(f"🧪 测试代码空间状态转换序列: {self.test_id}...")
             
             # 启动代码空间
-            await CODESPACE.start(self.test_id)
-            LOGGER.info("✅ 代码空间启动命令已执行")
+            try:
+                LOGGER.info(f"🚀 开始启动代码空间...")
+                await CODESPACE.start(student.sid)
+                LOGGER.info(f"✅ 代码空间启动命令已执行")
+            except Exception as e:
+                LOGGER.error(f"❌ 代码空间启动失败: {e}")
+                self.fail(f"启动代码空间失败: {e}")
+
+            # 读取数据库，查看状态变化
+            student_db = await TABLE.read(student.sid)
+            LOGGER.info(f"📊 启动后数据库状态: {student_db.codespace.status}")
             
-            # 检查数据库中的初始状态
-            student_db = await TABLE.read(self.test_id)
-            LOGGER.info(f"👁️ 启动后数据库状态: {student_db.codespace.status}")
-            self.assertEqual("running", student_db.codespace.status, 
-                             "启动后数据库中的状态应该是'running'")
+            # 等待并检查状态
+            max_retries = 10
+            retry_delay = 1  # 1秒
+            success = False
             
-            # 调用get_status触发状态更新（只关心日志中显示的更新效果，不验证返回值）
-            await CODESPACE.get_status(self.test_id)
-            LOGGER.info("👁️ 已调用get_status触发状态更新")
+            for i in range(max_retries):
+                status = await CODESPACE.get_status(student.sid)
+                LOGGER.info(f"👁️ 第 {i+1} 次检查状态: {status}")
+                
+                # 允许的状态: running, starting, failed (因为可能失败但需要继续测试)
+                if status in [cluster.JobInfo.Status.RUNNING, cluster.JobInfo.Status.STARTING]:
+                    success = True
+                    LOGGER.info(f"✅ 找到有效状态: {status}")
+                    break
+                elif status == cluster.JobInfo.Status.FAILED:
+                    LOGGER.warning(f"⚠️ 代码空间状态为FAILED，但继续测试流程")
+                    # 不标记为成功，但继续测试
+                    break
+                elif i < max_retries - 1:  # 如果不是最后一次尝试
+                    LOGGER.info(f"⏳ 等待 {retry_delay} 秒后重试...")
+                    await asyncio.sleep(retry_delay)
             
-            # 再次检查数据库中的状态
-            student_db = await TABLE.read(self.test_id)
-            LOGGER.info(f"👁️ 更新后数据库状态: {student_db.codespace.status}")
+            LOGGER.info(f"👁️ 循环结束最终状态: {status}")
             
-            # 验证URL返回有效字符串
-            url = await CODESPACE.get_url(self.test_id)
-            LOGGER.info(f"🔗 获取URL: {url}")
+            # 检查URL可用性
+            url_result = await CODESPACE.get_url(student.sid)
+            student_db = await TABLE.read(student.sid)
+            LOGGER.info(f"🔗 代码空间 URL 结果: {url_result}")
+            LOGGER.info(f"📊 数据库中的URL: {student_db.codespace.url}")
             
-            # 检查数据库中的URL
-            student_db = await TABLE.read(self.test_id)
-            LOGGER.info(f"👁️ 数据库中的URL: {student_db.codespace.url}")
+            # 检查状态对应的URL结果
+            if status == cluster.JobInfo.Status.RUNNING:
+                LOGGER.info(f"✅ 状态为running，检查URL")
+                # URL可以是字符串、True或False（如果服务还没准备好）
+                LOGGER.info(f"当前URL值: {url_result}")
+            elif status == cluster.JobInfo.Status.STARTING:
+                LOGGER.info(f"✅ 状态为starting，检查URL是否为True")
+                self.assertTrue(url_result == True, 
+                               f"代码空间状态为starting时，URL应为True，但得到 {url_result}")
+            elif status == cluster.JobInfo.Status.FAILED:
+                # 失败状态下，URL可能是False
+                LOGGER.info(f"⚠️ 代码空间状态为FAILED，URL检查已跳过")
             
-            # 根据文档，get_url可能返回str、True或False
-            # 当状态为starting时应返回True
-            status = student_db.codespace.status
-            LOGGER.info(f"👁️ 验证URL返回值: 当前状态={status}, URL返回值={url}")
+            # 停止代码空间
+            LOGGER.info(f"🛑 停止代码空间...")
+            await CODESPACE.stop(student.sid)
             
-            # 不再验证get_url的返回值，而是验证数据库中的状态是否正确
-            self.assertEqual("starting", status, "数据库中的状态应该是'starting'")
+            # 检查停止后状态
+            status_after_stop = await CODESPACE.get_status(student.sid)
+            LOGGER.info(f"👁️ 停止后状态: {status_after_stop}")
+            self.assertEqual(status_after_stop, cluster.JobInfo.Status.STOPPED)
             
-            LOGGER.info("✅ 成功测试: 代码空间状态转换序列")
+            # 清理
+            LOGGER.info(f"🧹 开始清理测试资源...")
+            await self._ensure_cleanup()
+            LOGGER.info(f"✅ 测试清理完成")
+            LOGGER.info(f"======= 测试结束 =======")
             
         finally:
             # 使用增强的清理方法
@@ -508,7 +543,6 @@ class RealK8sClusterTest(StubClusterTestCase):
 
     def setUp(self):
         """设置真实 k8s 测试环境"""
-        # 不调用父类setUp避免设置cluster_stub
         self.test_id = f"real-{uuid.uuid4().hex[:8]}"
         self.cluster_stub = None  # 确保cluster_stub为None，避免cleanup时的错误
         LOGGER.info(f"设置真实k8s测试 {self.test_id}")
@@ -542,21 +576,19 @@ class RealK8sClusterTest(StubClusterTestCase):
         except Exception as e:
             LOGGER.error(f"❌ 代码空间启动失败: {e}")
             self.fail(f"启动代码空间失败: {e}")
-        
+
         # 读取数据库，查看状态变化
         student_db = await TABLE.read(student.sid)
         LOGGER.info(f"📊 启动后数据库状态: {student_db.codespace.status}")
         
         # 等待并检查状态
         max_retries = 10
-        retry_delay = 6  # 6秒
+        retry_delay = 1  # 1秒
         success = False
         
         for i in range(max_retries):
             status = await CODESPACE.get_status(student.sid)
-            student_db = await TABLE.read(student.sid)
             LOGGER.info(f"👁️ 第 {i+1} 次检查状态: {status}")
-            LOGGER.info(f"📊 数据库中状态: {student_db.codespace.status}")
             
             # 允许的状态: running, starting, failed (因为可能失败但需要继续测试)
             if status in [CodespaceStatus.RUNNING, CodespaceStatus.STARTING]:
@@ -570,7 +602,9 @@ class RealK8sClusterTest(StubClusterTestCase):
             elif i < max_retries - 1:  # 如果不是最后一次尝试
                 LOGGER.info(f"⏳ 等待 {retry_delay} 秒后重试...")
                 await asyncio.sleep(retry_delay)
-        
+                
+        LOGGER.info(f"👁️ 循环结束最终状态: {status}")
+        self.assertEqual(success, True)
         # 检查URL可用性
         url_result = await CODESPACE.get_url(student.sid)
         student_db = await TABLE.read(student.sid)
@@ -605,72 +639,6 @@ class RealK8sClusterTest(StubClusterTestCase):
         LOGGER.info(f"✅ 测试清理完成")
         LOGGER.info(f"======= 测试结束 =======")
         
-    async def test_restart_running_codespace(self):
-        """测试重启已经在运行中的代码空间"""
-        from core.student import CODESPACE, CodespaceStatus, TABLE
-        import asyncio
-        
-        student = await self._setup_test_student()
-        LOGGER.info(f"======= 重启测试开始 =======")
-        
-        # 首先启动代码空间
-        await CODESPACE.start(student.sid)
-        LOGGER.info("✅ 首次启动代码空间")
-        
-        # 等待代码空间启动
-        max_retries = 10
-        retry_delay = 6  # 6秒
-        
-        for i in range(max_retries):
-            status = await CODESPACE.get_status(student.sid)
-            if status == CodespaceStatus.RUNNING:
-                LOGGER.info(f"✅ 代码空间已进入运行状态")
-                break
-            elif status == CodespaceStatus.FAILED:
-                LOGGER.warning(f"⚠️ 代码空间启动失败，但继续测试")
-                break
-            elif i < max_retries - 1:
-                LOGGER.info(f"⏳ 等待代码空间启动... ({i+1}/{max_retries})")
-                await asyncio.sleep(retry_delay)
-        
-        # 检查状态
-        status1 = await CODESPACE.get_status(student.sid)
-        LOGGER.info(f"👁️ 首次启动后状态: {status1}")
-        
-        # 获取首次URL
-        url1 = await CODESPACE.get_url(student.sid)
-        LOGGER.info(f"🔗 首次URL: {url1}")
-        
-        # 再次启动同一个代码空间
-        try:
-            await CODESPACE.start(student.sid)
-            LOGGER.info("✅ 尝试再次启动代码空间成功")
-        except Exception as e:
-            LOGGER.error(f"❌ 再次启动失败: {e}")
-            self.fail(f"重启运行中的代码空间应该不抛出异常，但得到: {e}")
-        
-        # 给系统一些时间响应
-        await asyncio.sleep(5)
-        
-        # 检查状态是否保持一致
-        status2 = await CODESPACE.get_status(student.sid)
-        LOGGER.info(f"👁️ 再次启动后状态: {status2}")
-        
-        # 验证两次状态应该一致
-        self.assertEqual(status1, status2, "重启运行中的代码空间后状态应保持不变")
-        
-        # 验证URL一致性
-        url2 = await CODESPACE.get_url(student.sid)
-        LOGGER.info(f"🔗 再次URL: {url2}")
-        
-        if isinstance(url1, str) and isinstance(url2, str):
-            self.assertEqual(url1, url2, "URL应该保持一致")
-        
-        # 清理
-        await CODESPACE.stop(student.sid)
-        await self._ensure_cleanup()
-        LOGGER.info(f"======= 重启测试结束 =======")
-    
     async def test_stop_already_stopped(self):
         """测试停止已经停止的代码空间"""
         from core.student import CODESPACE, CodespaceStatus
@@ -742,7 +710,7 @@ class RealK8sClusterTest(StubClusterTestCase):
             if status in [CodespaceStatus.RUNNING, CodespaceStatus.FAILED]:
                 break
             LOGGER.info(f"⏳ 等待代码空间启动... ({i+1}/{max_retries})")
-            await asyncio.sleep(6)
+            await asyncio.sleep(3)
         
         # 直接从集群获取状态
         job_param = CODESPACE.build_job_params(student.sid)

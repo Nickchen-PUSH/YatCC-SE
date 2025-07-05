@@ -104,8 +104,8 @@ class KubernetesSpec:
             ],
             "volumeMounts": self._build_volume_mounts(),
             "resources": self._build_resources(),
-            "readinessProbe": self._build_probe(),
-            "livenessProbe": self._build_probe(initial_delay=60, period=30),
+            # "readinessProbe": self._build_probe(),
+            # "livenessProbe": self._build_probe(initial_delay=60, period=30),
         }
 
     def _build_volume_mounts(self) -> List[Dict[str, str]]:
