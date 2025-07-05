@@ -77,7 +77,7 @@ class ClusterConfig(Configuration):
     DEFAULT_TYPE = "mock"
 
     class Kubernetes(Configuration):
-        NAMESPACE = "yatcc-test"
+        NAMESPACE = "default"
         KUBECONFIG_PATH = None
         TIMEOUT = 30
 
