@@ -308,7 +308,7 @@ async def batch_delete_student(body: RootModel[list[StudentDelete]]):
 
 # 进入学生代码空间 api
 @WSGI.get(
-    "/student/codespace",
+    "/student/codespace/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         302: {"description": "容器正在运行，重定向到学生代码空间页面"},
@@ -318,14 +318,14 @@ async def batch_delete_student(body: RootModel[list[StudentDelete]]):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace(id: str):
+async def student_codespace(path: DetailPath):
     """进入学生代码空间（重定向）"""
     pass
 
 
 # 开启学生代码空间 api
 @WSGI.post(
-    "/student/codespace",
+    "/student/codespace/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "启动操作成功"},
@@ -335,14 +335,14 @@ async def student_codespace(id: str):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace_start(id: str):
+async def student_codespace_start(path: DetailPath):
     """启动学生代码空间，立即返回，不会等待代码空间启动完成"""
     pass
 
 
 # 关闭学生代码空间 api
 @WSGI.delete(
-    "/student/codespace",
+    "/student/codespace/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "停止操作成功"},
@@ -351,14 +351,14 @@ async def student_codespace_start(id: str):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace_stop(id: str):
+async def student_codespace_stop(path: DetailPath):
     """停止学生代码空间，立即返回，不会等待代码空间停止完成"""
     pass
 
 
 # 获取学生代码空间信息 api
 @WSGI.get(
-    "/student/info",
+    "/student/codespace/info/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {
@@ -373,14 +373,14 @@ async def student_codespace_stop(id: str):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace_info(id: str):
+async def student_codespace_info(path: DetailPath):
     """获取学生代码空间信息"""
     pass
 
 
 # 保持学生代码空间活跃 api
 @WSGI.post(
-    "/student/keepalive",
+    "/student/keepalive/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "保持活跃操作成功"},
@@ -389,7 +389,7 @@ async def student_codespace_info(id: str):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace_keepalive(id: str):
+async def student_codespace_keepalive(path: DetailPath):
     """保持学生代码空间活跃，防止超时"""
     pass
 
@@ -478,7 +478,7 @@ class CodespaceQuota(BaseModel):
 
 
 @WSGI.put(
-    "/student/codespace/quota",
+    "/student/codespace/quota/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "配额调整成功"},
@@ -486,7 +486,7 @@ class CodespaceQuota(BaseModel):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def update_student_codespace_quota(id: str, body: CodespaceQuota):
+async def update_student_codespace_quota(path: DetailPath, body: CodespaceQuota):
     """调整学生代码空间配额"""
     pass
 

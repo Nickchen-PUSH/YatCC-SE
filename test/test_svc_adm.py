@@ -258,64 +258,57 @@ class Basic(unittest.TestCase):
         RUNNER.run(ado())
     
     def test_codespace(self):
-        self._test_api_key("/student/codespace", {"id": "24111353"}, "GET")
+        self._test_api_key("/student/codespace/24111352", None, "GET")
 
         # 测试获取学生代码空间
         resp = self.client.get(
-                "/student/codespace",
-                json={"id": "24111352"},
+                "/student/codespace/24111352",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 303)
 
         # 测试获取运行中的学生代码空间
         resp = self.client.get(
-                "/student/codespace",
-                json={"id": "24111353"},
+                "/student/codespace/24111353",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 302)
 
         # 测试获取不存在的学生代码空间
         resp = self.client.get(
-                "/student/codespace",
-                json={"id": "404"},
+                "/student/codespace/404",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 404)
 
 
     def test_start_codespace(self):
-        self._test_api_key("/student/codespace", {"id": "24111352"}, "POST")
+        self._test_api_key("/student/codespace/24111352", None, "POST")
 
         # 测试启动学生代码空间
         resp = self.client.post(
-                "/student/codespace",
-                json={"id": "24111352"},
+                "/student/codespace/24111352",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 200)
 
         # 测试启动已启动的学生代码空间
         resp = self.client.post(
-                "/student/codespace",
-                json={"id": "24111353"},
+                "/student/codespace/24111353",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 202)
 
         # 测试启动达到限制的学生代码空间
         resp = self.client.post(
-                "/student/codespace",
-                json={"id": "24111354"},
+                "/student/codespace/24111354",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 402)
 
         # 测试启动的学生代码空间
         resp = self.client.post(
-                "/student/codespace",
-                json={"id": "404"},
+                "/student/codespace/404",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 404)
@@ -327,28 +320,25 @@ class Basic(unittest.TestCase):
         RUNNER.run(ado())
 
     def test_stop_codespace(self):
-        self._test_api_key("/student/codespace", {"id": "24111352"}, "DELETE")
+        self._test_api_key("/student/codespace/24111352", None, "DELETE")
 
         # 测试停止已停止的学生代码空间
         resp = self.client.delete(
-                "/student/codespace",
-                json={"id": "24111352"},
+                "/student/codespace/24111352",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 202)
 
         # 测试停止学生代码空间
         resp = self.client.delete(
-                "/student/codespace",
-                json={"id": "24111353"},
+                "/student/codespace/24111353",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 200)
 
         # 测试停止不存在的学生代码空间
         resp = self.client.delete(
-                "/student/codespace",
-                json={"id": "404"},
+                "/student/codespace/404",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 404)
@@ -361,12 +351,11 @@ class Basic(unittest.TestCase):
 
 
     def test_codespace_info(self):
-        self._test_api_key("/student/info", {"id": "24111352"}, "GET")
+        self._test_api_key("/student/codespace/info/24111352", None, "GET")
 
         # 测试获取停止中的学生代码空间信息
         resp = self.client.get(
-                "/student/info",
-                json={"id": "24111352"},
+                "/student/codespace/info/24111352",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 200)
@@ -374,8 +363,7 @@ class Basic(unittest.TestCase):
 
         # 测试获取运行中的学生代码空间信息
         resp = self.client.get(
-                "/student/info",
-                json={"id": "24111353"},
+                "/student/codespace/info/24111353",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 200)
@@ -383,8 +371,7 @@ class Basic(unittest.TestCase):
 
         # 测试获取不存在的学生代码空间信息
         resp = self.client.get(
-                "/student/info",
-                json={"id": "404"},
+                "/student/codespace/info404",
                 headers=self.header
             )
         self.assertEqual(resp.status_code, 404)
