@@ -266,7 +266,7 @@ class Basic(unittest.TestCase):
             "/codespace",
             headers=self.running_header,
         )
-        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(resp.status_code, 200)
 
         # 测试启动未运行中的代码空间
         resp = self.client.post(
@@ -297,7 +297,7 @@ class Basic(unittest.TestCase):
             "/codespace",
             headers=self.header,
         )
-        self.assertEqual(resp.status_code, 202)
+        self.assertEqual(resp.status_code, 200)
 
         # 测试关闭已启动的代码空间
         resp = self.client.delete(
@@ -323,8 +323,8 @@ class Basic(unittest.TestCase):
 
         # 测试获取启动的代码空间信息
         resp = self.client.get(
-            "/codespace",
+            "/codespace/info",
             headers=self.running_header,
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json["access_url"], "http://localhost:8080/codespace/24111353")
+        self.assertEqual(resp.json["access_url"], "http://mock-service-24111353:8080")

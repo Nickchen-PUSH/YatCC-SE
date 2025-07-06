@@ -263,9 +263,9 @@ async def codespace():
     if space_status=="running" and url:
         return redirect(url,code=302)
     elif space_status=="running" and not url:
-        return redirect("/",code=307)
+        return redirect("/codespace",code=307)
     else:
-        return redirect("/",code=303)
+        return redirect("/codespace",code=303)
 
 
 
@@ -283,7 +283,17 @@ async def codespace():
 async def codespace_start():
     """启动代码空间，立即返回，不会等待代码空间启动完成"""
     pass    #TODO
-
+    account = await check_api_key()
+    try:
+        await core.student.CODESPACE.start(account)
+        return _OK
+    except core.student.CodespaceQuotaExceededError:
+        return Response("代码空间配额已耗尽", status=402)
+    except core.student.CodespaceStartError as e:
+        return Response(str(e), status=500)
+    except Exception as e:
+        LOGGER.error(f"启动代码空间失败: {account}, 错误: {e}")
+        return Response("启动代码空间失败", status=500)
 
 
 @WSGI.delete(
@@ -298,7 +308,15 @@ async def codespace_start():
 )
 async def codespace_stop():
     """停止代码空间，立即返回，不会等待代码空间停止完成"""
-    pass  # TODO
+    account = await check_api_key()
+    try:
+        await core.student.CODESPACE.stop(account)
+        return _OK
+    except core.student.CodespaceNotRunningError:
+        return Response("容器不在运行", status=202)
+    except Exception as e:
+        LOGGER.error(f"停止代码空间失败: {account}, 错误: {e}")
+        return Response("停止代码空间失败", status=500)
 
 
 class CodespaceInfo(BaseModel):
@@ -332,7 +350,24 @@ class CodespaceInfo(BaseModel):
 )
 async def codespace_info():
     """获取代码空间信息"""
-    pass  # TODO
+    account = await check_api_key()
+    try:
+        student = await core.student.TABLE.read(account)
+        status = await core.student.CODESPACE.get_status(account)
+        url = await core.student.CODESPACE.get_url(account)
+        
+        return {
+            "access_url": url if status == "running" else False,
+            "last_start": student.codespace.last_start,
+            "last_stop": student.codespace.last_stop,
+            "time_quota": student.codespace.time_quota,
+            "time_used": student.codespace.time_used,
+            "space_quota": 0,  # 目前没有空间配额信息
+            "space_used": 0    # 目前没有空间使用信息
+        }, 200
+    except Exception as e:
+        LOGGER.error(f"获取代码空间信息失败: {account}, 错误: {e}")
+        raise ErrorResponse(Response("获取代码空间信息失败", status=500))
 
 
 @WSGI.post(
@@ -347,7 +382,15 @@ async def codespace_info():
 )
 async def codespace_keepalive():
     """保持代码空间活跃，防止超时"""
-    pass  # TODO
+    account = await check_api_key()
+    try:
+        if not await core.student.CODESPACE.is_running(account):
+            return Response("代码空间不在运行", status=202)
+        await core.student.CODESPACE.keep_alive(account)
+        return _OK
+    except Exception as e:
+        LOGGER.error(f"保持代码空间活跃失败: {account}, 错误: {e}")
+        return Response("保持代码空间活跃失败", status=500)
 
 
 # ==================================================================================== #
