@@ -18,14 +18,16 @@ ENVIRON = Environ
 
 
 class Executable(Configuration):
-    rm = "/bin/rm"
-    cp = "/bin/cp"
-    wget = "/opt/homebrew/bin/wget"
+    rm = "/usr/bin/rm"
+    cp = "/usr/bin/cp"
+    wget = "/usr/bin/wget"
     docker = "/usr/local/bin/docker"
-    redis_server = "/opt/homebrew/bin/redis-server"
+    redis_server = "/usr/bin/redis-server"
+    sshd = ""
 
 
 ENVIRON.EXECUTABLE = Executable
+
 
 # ==================================================================================== #
 
@@ -47,6 +49,15 @@ class Config(Configuration):
 
     CLUSTER: type["ClusterConfig"]
     """集群配置"""
+    
+    ENTRY: type["Entry"]
+    """入口程序配置"""
+    
+    SVC_STU: type["SvcStu"]
+    """学生服务配置"""
+    
+    SVC_ADM: type["SvcAdm"]
+    """管理员服务配置"""
 
 
 CONFIG = Config
@@ -67,6 +78,48 @@ class Core(Configuration):
 
 
 CONFIG.CORE = Core
+
+# ==================================================================================== #
+
+class SvcStu(Configuration):
+    static_dir = str(PROJECT_DIR / "stu-site/dist")
+    """前端静态站点目录路径"""
+
+
+CONFIG.SVC_STU = SvcStu
+
+
+class SvcAdm(Configuration):
+    static_dir = str(PROJECT_DIR / "adm-site/dist")
+    """前端静态站点目录路径"""
+
+
+CONFIG.SVC_ADM = SvcAdm
+
+
+# ==================================================================================== #
+
+class Entry(Configuration):
+    redis_executable: str = ENVIRON.EXECUTABLE.redis_server if ENVIRON else ""
+    """Redis 服务可执行程序"""
+    sshd_executable: str | None = ENVIRON.EXECUTABLE.sshd if ENVIRON else None
+    """SSH 服务可执行程序"""
+
+    health_check_interval = 60
+    """系统健康检查间隔（秒）"""
+    startup_integrity_check: bool | None = None
+    """启动时完整性检查：True 启用，False 禁用，None 由系统自行决定"""
+
+    svc_adm_workers = 2
+    """管理员服务的工作进程数"""
+    svc_stu_workers = 4
+    """学生服务的工作进程数"""
+
+    default_watching_students_interval = 60 * 15
+    """默认的学生监控间隔（秒）"""
+
+
+CONFIG.ENTRY = Entry
 
 # ==================================================================================== #
 

@@ -240,7 +240,9 @@ async def create_student(body: RootModel[list[StudentCreate]]):
         "failed": failed,
     }
 
+
 # TODO
+
 
 # 批量删除学生API
 class StudentDelete(BaseModel):
@@ -284,6 +286,7 @@ async def batch_delete_student(body: RootModel[list[StudentDelete]]):
     """批量删除学生"""
     pass
 
+
 # ==================================================================================== #
 
 
@@ -303,6 +306,7 @@ async def student_codespace(id: str):
     """进入学生代码空间（重定向）"""
     pass
 
+
 # 开启学生代码空间 api
 @WSGI.post(
     "/student/codespace",
@@ -318,6 +322,7 @@ async def student_codespace(id: str):
 async def student_codespace_start(id: str):
     """启动学生代码空间，立即返回，不会等待代码空间启动完成"""
     pass
+
 
 # 关闭学生代码空间 api
 @WSGI.delete(
@@ -343,7 +348,9 @@ async def student_codespace_stop(id: str):
         200: {
             "description": "成功返回学生代码空间信息",
             "content": {
-                "application/json": {"schema": student.CodespaceInfo.model_json_schema()}
+                "application/json": {
+                    "schema": student.CodespaceInfo.model_json_schema()
+                }
             },
         },
         404: {"description": "学生不存在"},
@@ -353,6 +360,7 @@ async def student_codespace_stop(id: str):
 async def student_codespace_info(id: str):
     """获取学生代码空间信息"""
     pass
+
 
 # 保持学生代码空间活跃 api
 @WSGI.post(
@@ -369,9 +377,11 @@ async def student_codespace_keepalive(id: str):
     """保持学生代码空间活跃，防止超时"""
     pass
 
+
 # 定义批量操作请求模型
 class CodespaceBatchOperation(BaseModel):
     ids: list[str] = Field(..., description="学生ID列表")
+
 
 # 批量启动代码空间API
 @WSGI.post(
@@ -408,6 +418,7 @@ async def batch_start_codespace(body: CodespaceBatchOperation):
     """批量启动多个学生的代码空间"""
     pass
 
+
 # 批量停止代码空间API
 @WSGI.delete(
     "/student/codespace",
@@ -443,10 +454,12 @@ async def batch_stop_codespace(body: CodespaceBatchOperation):
     """批量停止多个学生的代码空间"""
     pass
 
+
 # 调整学生代码空间配额API
 class CodespaceQuota(BaseModel):
     time_quota: int = Field(..., description="时间配额（秒）")
     space_quota: int = Field(0, description="空间配额（字节）")
+
 
 @WSGI.put(
     "/student/codespace/quota",
@@ -461,6 +474,30 @@ async def update_student_codespace_quota(id: str, body: CodespaceQuota):
     """调整学生代码空间配额"""
     pass
 
+
 # ==================================================================================== #
-#wsgi
-#main
+def wsgi():
+    import base.logger as logger
+    from core import ainit
+
+    logger.setup_logger(
+        log_dir=CONFIG.log_dir,
+        index_name="svc_adm",
+    )
+    LOGGER.info("Initializing admin service...")
+    RUNNER.run(ainit(cluster_mock=ENVIRON.mock_cluster))
+    return WSGI
+
+
+if __name__ == "__main__":
+    from argparse import ArgumentParser
+
+    argp = ArgumentParser()
+    argp.add_argument("--nodbg", action="store_true")
+    argp.add_argument("--port", type=int, default=5002)
+
+    args = argp.parse_args()
+    ARG_NODBG: bool = args.nodbg
+    ARG_PORT: int = args.port
+
+    wsgi().run(debug=not ARG_NODBG, port=ARG_PORT)

@@ -77,7 +77,7 @@ class MockCluster(ClusterABC):
             raise ValueError("user_id is required")
 
         # 生成作业ID
-        job_id = f"{job_params.user_id}"
+        job_id = f"codespace-{job_params.user_id}"
 
         # 创建作业信息
         job_info = JobInfo(

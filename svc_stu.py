@@ -46,8 +46,8 @@ WSGI = AsyncFlask(
             "in": "cookie",
         },
     },
-    # static_folder=CONFIG.svc_stu_static_dir,
-    # static_url_path="/static",
+    static_folder=CONFIG.SVC_STU.static_dir,
+    static_url_path="/static",
 )
 
 _SECURITY = [
@@ -355,15 +355,13 @@ async def codespace_keepalive():
 
 def wsgi():
     import base.logger as logger
-
-    async def ado():
-        import core
-        import cluster
-
-        await core.ainit(cluster_mock=ENVIRON.mock_cluster)
-
+    from core import ainit
+    logger.setup_logger(
+        log_dir=CONFIG.log_dir,
+        index_name="svc_stu",
+    )
     LOGGER.info("Initializing student service...")
-    RUNNER.run(ado())
+    RUNNER.run(ainit(cluster_mock=ENVIRON.mock_cluster))
     return WSGI
 
 

@@ -1,0 +1,184 @@
+#!/app/venv/bin/python3
+"""学生管理工具"""
+
+from argparse import ArgumentParser
+
+argp = ArgumentParser(description=__doc__)
+argps = argp.add_subparsers(dest="subcmd")
+
+argp_list = argps.add_parser("list", help="列出学生")
+argp_list.add_argument("--full", action="store_true", help="显示完整信息")
+
+argp_query = argps.add_parser("query", help="查询学生")
+argp_query.add_argument("sid", type=str, nargs="+", help="学生学号")
+
+argp_create = argps.add_parser("create", help="创建学生")
+argp_create.add_argument(
+    "--example", action="store_true", help="打印创建学生用的 JSON 文件示例"
+)
+argp_create.add_argument("json", type=str, nargs="*", help="学生创建信息 JSON 文件")
+argp_create.add_argument(
+    "--force", action="store_true", help="强制操作（只改变数据库状态）"
+)
+argp_create.add_argument("--it", action="store_true", help="交互式创建学生")
+
+argp_delete = argps.add_parser("delete", help="删除学生")
+argp_delete.add_argument("sid", type=str, nargs="+", help="学生学号")
+argp_delete.add_argument(
+    "--force", action="store_true", help="强制操作（只改变数据库状态）"
+)
+
+argp_password = argps.add_parser("password", help="学生密码操作")
+argp_password.add_argument("sid", type=str, help="学号")
+argp_password.add_argument("pwd", type=str, default="123456", help="密码")
+argp_password.add_argument("--reset", action="store_true", help="重置学生密码")
+
+ARGS = argp.parse_args()
+ARG_SUBCMD: str = ARGS.subcmd
+if ARG_SUBCMD is None:
+    argp.print_help()
+    exit(1)
+
+
+# ==================================================================================== #
+
+import os
+import sys
+
+sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.."))
+
+import base
+from run import __run__
+
+RUNNING_DIR, LOGGER, PROGRESS = __run__(__spec__, __file__)
+
+
+# ==================================================================================== #
+
+from core import student
+
+
+async def _list() -> int:
+    ARG_FULL: bool = ARGS.full
+    if ARG_FULL:
+        async for stu in student.TABLE.iter_all():
+            PROGRESS(stu.model_dump_json(indent=2))
+    else:
+        async for stu in student.TABLE.iter_all():
+            PROGRESS(f"{stu.sid!r}:{stu.user_info.name!r} - {stu.user_info.mail!r}")
+    return 0
+
+
+async def _query() -> int:
+    ARG_SID: list[str] = ARGS.sid
+    for sid in PROGRESS @ ARG_SID:
+        with PROGRESS[sid]:
+            try:
+                stu = await student.TABLE.read(sid)
+                print(stu.model_dump_json(indent=2))
+            except Exception as e:
+                PROGRESS(e)
+    return 0
+
+
+async def _create() -> int:
+    ARG_EXAMPLE: bool = ARGS.example
+    ARG_JSON: list[str] = ARGS.json
+    ARG_FORCE: bool = ARGS.force
+    ARG_IT: bool = ARGS.it
+
+    if ARG_IT:
+        sid = input("请输入学号: ").strip()
+        name = input("请输入姓名: ").strip()
+        mail = input("请输入邮箱: ").strip()
+        pwd = input("请输入密码: ").strip()
+
+        stu = student.Student(
+            sid=sid,
+            user_info=student.UserInfo(name=name, mail=mail),
+            **{},
+        )
+        stu.pwd_hash = pwd
+        if await student.TABLE.create(stu):
+            PROGRESS(f"成功创建 {stu.sid!r}:{stu.user_info.name!r}")
+        else:
+            PROGRESS(f"已存在 {stu.sid!r}:{stu.user_info.name!r}")
+        return 0
+    if ARG_EXAMPLE:
+        stu = student.Student(
+            sid="22335009",
+            user_info=student.UserInfo(
+                name="陈淏泉", mail="chenhq79@mail2.sysu.edu.cn"
+            ),
+            **{},
+        )
+        stu.pwd_hash = "这里填写密码明文，在读取时会被转为哈希"
+        print(stu.model_dump_json(indent=2))
+        return 0
+
+    for path in PROGRESS @ ARG_JSON:
+        try:
+            with open(path, "r") as f:
+                data = f.read()
+            stu = student.Student.model_validate_json(data)
+        except Exception as e:
+            PROGRESS(f"读取 {path} 失败: {e}")
+            continue
+        try:
+            stu.reset_password(stu.pwd_hash)
+            if await student.TABLE.create(stu):
+                PROGRESS(f"成功创建 {stu.sid!r}:{stu.user_info.name!r}")
+            else:
+                PROGRESS(f"已存在 {stu.sid!r}:{stu.user_info.name!r}")
+        except Exception as e:
+            PROGRESS(f"创建 {stu.sid!r}:{stu.user_info.name!r} 失败: {e}")
+    return 0
+
+
+async def _delete() -> int:
+    ARG_SID: list[str] = ARGS.sid
+    ARG_FORCE: bool = ARGS.force
+
+    for sid in PROGRESS @ ARG_SID:
+        try:
+            if await student.TABLE.delete(sid, force=ARG_FORCE):
+                PROGRESS(f"成功删除 {sid}")
+            else:
+                PROGRESS(f"不存在 {sid}")
+        except Exception as e:
+            PROGRESS(f"删除 {sid} 失败: {e}")
+    return 0
+
+
+async def _password() -> int:
+    ARG_SID: str = ARGS.sid
+    ARG_PWD: str = ARGS.pwd
+    ARG_RESET: bool = ARGS.reset
+
+    if ARG_RESET:
+        await student.TABLE.reset_password(ARG_SID, ARG_PWD)
+        PROGRESS(f"重置 {ARG_SID!r} 密码为 {ARG_PWD!r}")
+        return 0
+
+    if await student.TABLE.check_password(ARG_SID, ARG_PWD):
+        PROGRESS(f"正确 {ARG_SID!r} == {ARG_PWD!r}")
+        return 0
+    else:
+        PROGRESS(f"错误 {ARG_SID!r} != {ARG_PWD!r}")
+        return 1
+
+
+async def _main() -> int:
+    from core import ainit
+
+    await ainit(cluster_mock=True)
+    return await {
+        "list": _list,
+        "query": _query,
+        "create": _create,
+        "delete": _delete,
+        "password": _password,
+    }[ARG_SUBCMD]()
+
+
+exit(base.RUNNER.run(_main()))
