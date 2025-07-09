@@ -257,9 +257,6 @@ async def create_student(body: RootModel[list[StudentCreate]]):
     }
 
 
-# TODO
-
-
 # 批量删除学生API
 class StudentDelete(BaseModel):
     sid: str = Field(..., description="学生ID")
@@ -300,7 +297,19 @@ class StudentDelete(BaseModel):
 )
 async def batch_delete_student(body: RootModel[list[StudentDelete]]):
     """批量删除学生"""
-    pass
+    await check_api_key()
+    success = []
+    failed = []
+    for stu_data in body.root:
+        try:
+            await student.TABLE.delete(stu_data.sid)
+            success.append(stu_data.sid)
+        except Exception as e:
+            failed.append({"id": stu_data.sid, "reason": str(e)})
+    return {
+        "success": success,
+        "failed": failed,
+    }
 
 
 # ==================================================================================== #
