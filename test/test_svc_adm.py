@@ -378,10 +378,70 @@ class Basic(unittest.TestCase):
 
     
     def test_batch_start_codespace(self):
-        pass # TODO
+        ids = [
+            "24111352",
+            "24111353",
+            "24111354",
+        ]
+        self._test_api_key("/student/codespace", {"ids": ids}, "POST")
+
+        # 测试批量启动学生代码空间
+        resp = self.client.post(
+                "/student/codespace",
+                json={"ids": ids},
+                headers=self.header
+            )
+        self.assertEqual(resp.status_code, 200)
+
+        self.assertIn("24111352", resp.json["success"])
+        self.assertNotIn("24111353", resp.json["success"])
+        self.assertNotIn("24111354", resp.json["success"])
+        async def ado():
+            # 恢复旧数据
+            await student.CODESPACE.stop("24111352")
+
+        RUNNER.run(ado())
 
     def test_batch_stop_codespace(self):
-        pass # TODO
+        ids = [
+            "24111352",
+            "24111353",
+        ]
+        self._test_api_key("/student/codespace", {"ids": ids}, "DELETE")
+
+        # 测试批量停止学生代码空间
+        resp = self.client.delete(
+                "/student/codespace",
+                json={"ids": ids},
+                headers=self.header
+            )
+        self.assertEqual(resp.status_code, 200)
+
+        self.assertIn("24111353", resp.json["success"])
+        self.assertNotIn("24111352", resp.json["success"])
+        async def ado():
+            # 恢复旧数据
+            await student.CODESPACE.start("24111353")
+
+        RUNNER.run(ado())
 
     def test_update_codespace_quota(self):
-        pass # TODO
+        self._test_api_key("/student/codespace/quota/24111352", {"time_quota": 7200}, "PUT")
+
+        # 测试更新学生代码空间配额
+        resp = self.client.put(
+                "/student/codespace/quota/24111352",
+                json={
+                    "time_quota": 7200,
+                    "space_quota": 1024 * 1024 * 1024,
+                },
+                headers=self.header
+            )
+        self.assertEqual(resp.status_code, 200)
+
+        # 检查更新是否成功
+        resp = self.client.get(
+                "/student/24111352",
+                headers=self.header
+            )
+        self.assertEqual(resp.json["time_quota"], 7200)

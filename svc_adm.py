@@ -392,7 +392,7 @@ async def student_codespace_stop(path: DetailPath):
         if status=="stopped":
             return Response("代码空间不在运行", status=202)
     except student.StudentNotFoundError:
-        return Response("Student not found", status=404)
+        return Response("学生不存在", status=404)
     await student.CODESPACE.stop(path.sid)
     return _OK
 
@@ -421,7 +421,7 @@ async def student_codespace_info(path: DetailPath):
         student_data=await student.TABLE.read(path.sid)
         return StudentDetail.from_student(student_data).model_dump(),200
     except student.StudentNotFoundError:
-        return Response("Student not found", status=404)
+        return Response("学生不存在", status=404)
 
 
 # 保持学生代码空间活跃 api
@@ -478,7 +478,25 @@ class CodespaceBatchOperation(BaseModel):
 )
 async def batch_start_codespace(body: CodespaceBatchOperation):
     """批量启动多个学生的代码空间"""
-    pass
+    await check_api_key()
+    success = []
+    failed = []
+    for sid in body.ids:
+        try:
+            status = await student.CODESPACE.get_status(sid)
+            if status == "running":
+                failed.append({"id": sid, "reason": "代码空间已在运行"})
+                continue
+            await student.CODESPACE.start(sid)
+            success.append(sid)
+        except student.StudentNotFoundError:
+            failed.append({"id": sid, "reason": "学生不存在"})
+        except student.CodespaceQuotaExceededError:
+            failed.append({"id": sid, "reason": "代码空间配额已耗尽"})
+    return {
+        "success": success,
+        "failed": failed,
+    }, 200
 
 
 # 批量停止代码空间API
@@ -514,7 +532,23 @@ async def batch_start_codespace(body: CodespaceBatchOperation):
 )
 async def batch_stop_codespace(body: CodespaceBatchOperation):
     """批量停止多个学生的代码空间"""
-    pass
+    await check_api_key()
+    success = []
+    failed = []
+    for sid in body.ids:
+        try:
+            status = await student.CODESPACE.get_status(sid)
+            if status == "stopped":
+                failed.append({"id": sid, "reason": "代码空间不在运行"})
+                continue
+            await student.CODESPACE.stop(sid)
+            success.append(sid)
+        except student.StudentNotFoundError:
+            failed.append({"id": sid, "reason": "学生不存在"})
+    return {
+        "success": success,
+        "failed": failed,
+    }, 200
 
 
 # 调整学生代码空间配额API
@@ -534,7 +568,16 @@ class CodespaceQuota(BaseModel):
 )
 async def update_student_codespace_quota(path: DetailPath, body: CodespaceQuota):
     """调整学生代码空间配额"""
-    pass
+    await check_api_key()
+    try:
+        # 检查学生是否存在
+        student_data = await student.TABLE.read(path.sid)
+        # 暂时不支持空间配额调整
+        student_data.codespace.time_quota = body.time_quota
+        await student.TABLE.write(student_data)
+        return _OK
+    except student.StudentNotFoundError:
+        return Response("学生不存在", status=404)
 
 
 # ==================================================================================== #

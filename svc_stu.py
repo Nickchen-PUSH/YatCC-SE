@@ -224,8 +224,7 @@ class UserResetPassword(BaseModel):
     security=_SECURITY,
 )
 async def user_reset_password(body: UserResetPassword):
-    # """重置密码"""
-    # pass    #TODO
+    """重置密码"""
     account = await check_api_key()
     try:
         if not await core.student.TABLE.check_password(account, body.old_pwd):
