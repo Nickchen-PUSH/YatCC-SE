@@ -284,6 +284,9 @@ async def codespace_start():
     """启动代码空间，立即返回，不会等待代码空间启动完成"""
     pass    #TODO
     account = await check_api_key()
+    status=await core.student.CODESPACE.get_status(account)
+    if status=="running":
+        return Response("代码空间已启动", status=202)
     try:
         await core.student.CODESPACE.start(account)
         return _OK
@@ -309,6 +312,9 @@ async def codespace_start():
 async def codespace_stop():
     """停止代码空间，立即返回，不会等待代码空间停止完成"""
     account = await check_api_key()
+    status=await core.student.CODESPACE.get_status(account)
+    if(status=="stopped"):
+        return Response("代码空间未启动", status=202)
     try:
         await core.student.CODESPACE.stop(account)
         return _OK

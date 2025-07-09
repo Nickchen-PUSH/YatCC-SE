@@ -54,7 +54,7 @@ class Basic(unittest.TestCase):
             )
             stu.reset_password("1234567")
             await student.TABLE.create(stu)
-            student.CODESPACE.start("24111353")
+            await student.CODESPACE.start("24111353")
 
             stu = student.Student(
                 sid="24111354",

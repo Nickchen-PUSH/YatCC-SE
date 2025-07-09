@@ -320,7 +320,27 @@ async def batch_delete_student(body: RootModel[list[StudentDelete]]):
 )
 async def student_codespace(path: DetailPath):
     """进入学生代码空间（重定向）"""
-    pass
+    await check_api_key()
+    try:
+        # 检查学生是否存在
+        student_data = await student.TABLE.read(path.sid)
+        
+        # 获取代码空间状态和URL
+        status = await student.CODESPACE.get_status(path.sid)
+        url = await student.CODESPACE.get_url(path.sid)
+        
+        if status == "running" and url:
+            # 代码空间正在运行且有URL，重定向到代码空间
+            return redirect(url, code=302)
+        elif status == "starting" or url is True:
+            # 代码空间正在启动中，重定向到管理页面
+            return redirect(f"/student/codespace/manage/{path.sid}", code=307)
+        else:
+            # 其他情况重定向到管理页面
+            return redirect(f"/student/codespace/manage/{path.sid}", code=303)
+            
+    except student.StudentNotFoundError:
+        raise ErrorResponse(Response("Student not found", status=404))
 
 
 # 开启学生代码空间 api
@@ -337,7 +357,20 @@ async def student_codespace(path: DetailPath):
 )
 async def student_codespace_start(path: DetailPath):
     """启动学生代码空间，立即返回，不会等待代码空间启动完成"""
-    pass
+    await check_api_key()
+    try:
+        status=await student.CODESPACE.get_status(path.sid)
+        if status=="running":
+            return Response("代码空间已启动", status=202)
+    except student.StudentNotFoundError:
+        return Response("Student not found", status=404)
+    try:
+        await student.CODESPACE.start(path.sid)
+        return _OK
+    except student.CodespaceQuotaExceededError:
+        return Response("代码空间配额已耗尽", status=402)
+    
+
 
 
 # 关闭学生代码空间 api
@@ -353,7 +386,15 @@ async def student_codespace_start(path: DetailPath):
 )
 async def student_codespace_stop(path: DetailPath):
     """停止学生代码空间，立即返回，不会等待代码空间停止完成"""
-    pass
+    await check_api_key()
+    try:
+        status=await student.CODESPACE.get_status(path.sid)
+        if status=="stopped":
+            return Response("代码空间不在运行", status=202)
+    except student.StudentNotFoundError:
+        return Response("Student not found", status=404)
+    await student.CODESPACE.stop(path.sid)
+    return _OK
 
 
 # 获取学生代码空间信息 api
@@ -375,7 +416,12 @@ async def student_codespace_stop(path: DetailPath):
 )
 async def student_codespace_info(path: DetailPath):
     """获取学生代码空间信息"""
-    pass
+    await check_api_key()
+    try:
+        student_data=await student.TABLE.read(path.sid)
+        return StudentDetail.from_student(student_data).model_dump(),200
+    except student.StudentNotFoundError:
+        return Response("Student not found", status=404)
 
 
 # 保持学生代码空间活跃 api

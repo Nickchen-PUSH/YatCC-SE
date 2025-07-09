@@ -266,7 +266,7 @@ class Basic(unittest.TestCase):
             "/codespace",
             headers=self.running_header,
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 202)
 
         # 测试启动未运行中的代码空间
         resp = self.client.post(
@@ -297,7 +297,7 @@ class Basic(unittest.TestCase):
             "/codespace",
             headers=self.header,
         )
-        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.status_code, 202)
 
         # 测试关闭已启动的代码空间
         resp = self.client.delete(
