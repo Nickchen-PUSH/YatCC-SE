@@ -1,4 +1,3 @@
-import type { ErrorResponse } from '@/types/api'
 import request from './base'
 import { type CodeSpaceInfo } from '@/types'
 
@@ -21,7 +20,7 @@ export async function getCodespaceInfo(): Promise<CodeSpaceInfo | null> {
   if (!response) {
     return null
   }
-  if (response.status === 201) {
+  if (response.status === 200) {
     const data: CodeSpaceInfoResponse = await response.json()
     return {
       access_url: data.access_url,
@@ -48,15 +47,13 @@ export async function startCodespace(): Promise<
   if (!response) {
     return 'Error'
   }
-  if (response.status === 201) {
-    return 'Ok'
-  } else if (response.status === 202) {
-    const error = (await response.json()) as ErrorResponse
-    if (error.type === 1) {
+  switch (response.status) {
+    case 200:
+      return 'Ok'
+    case 202:
       return 'Already Running'
-    } else if (error.type === 2) {
+    case 402:
       return 'Run Out of Quota'
-    }
   }
   return 'Error'
 }
@@ -70,7 +67,7 @@ export async function stopCodespace(): Promise<'Ok' | 'Not Running' | 'Error'> {
   if (!response) {
     return 'Error'
   }
-  if (response.status === 201) {
+  if (response.status === 200) {
     return 'Ok'
   } else {
     return 'Not Running'

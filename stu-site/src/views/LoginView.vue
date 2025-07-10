@@ -44,7 +44,7 @@ const handleLogin = async () => {
 </script>
 
 <template>
-  <div class="py-48 flex">
+  <div class="py-44 flex">
     <!-- 登录卡片容器 -->
     <div class="m-auto bg-white dark:bg-#2c2c2c rounded-2xl shadow-lg p-8 w-90vw max-w-400px
              transition-all duration-300 hover:shadow-xl dark:shadow-gray-800/30">

@@ -7,6 +7,10 @@ const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
+      path: '/index.html',
+      redirect: '/', // 重定向到根路径
+    },
+    {
       path: '/',
       name: 'home',
       component: HomeView,
