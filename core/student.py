@@ -1,3 +1,4 @@
+import asyncio
 from enum import Enum
 import os
 from datetime import datetime
@@ -665,12 +666,38 @@ class CODESPACE:
             ),
         )
 
-    # 下面的先不实现
     @classmethod
     async def watch(cls, sid: str) -> None:
         """监控代码空间活动状态，更新最后活动时间，停止空闲作业"""
-        # TODO
-        pass
+        try:
+            student = await TABLE.read(sid)
+            if student.codespace.status != CodespaceStatus.RUNNING:
+                return
+
+            now = datetime.now().timestamp()
+            
+            # 检查是否超出时间配额
+            if student.codespace.time_quota > 0:
+                current_usage = now - student.codespace.last_watch
+                student.codespace.last_watch = now
+                student.codespace.time_used += current_usage
+                await TABLE.write(student)
+                if student.codespace.time_used >= student.codespace.time_quota:
+                    LOGGERR.info(f"学生 {sid} 代码空间因超出配额将被停止。")
+                    await cls.stop(sid)
+
+        except StudentNotFoundError:
+            LOGGERR.warning(f"监控期间找不到学生 {sid}，跳过。")
+        except Exception as e:
+            LOGGERR.error(f"监控学生 {sid} 时发生未知错误: {e}")
+
+
+    @classmethod
+    async def watch_all(cls) -> None:
+        """监控所有学生的代码空间"""
+        sids = await TABLE.all_ids()
+        tasks = [cls.watch(sid) for sid in sids]
+        await asyncio.gather(*tasks)
 
     @classmethod
     async def keep_alive(cls, sid: str) -> None:

@@ -130,7 +130,7 @@ async def start() -> None:
         PROGRESS(f"PID: {SVC_ADM.pid}, {SVC_STU.pid}")
 
     ######
-    # aio.create_task(run(), name="run")
+    aio.create_task(run(), name="run")
 
 
 async def stop():
@@ -169,33 +169,16 @@ async def stop():
 async def run():
     """在系统运行期间执行"""
 
-    from datetime import datetime
-
     from .core import student
-    from .core import tasker
 
-    # aio.create_task(tasker.watch())
-    await aio.sleep(3)  # 等待队列监控就绪
+    await aio.sleep(3)  # 等待服务就绪
 
-    # if await tasker.submit(
-    #     "学生监控例程 - 启动",
-    #     (
-    #         datetime.now().timestamp(),
-    #         tasker.Task(
-    #             desc="学生监控例程",
-    #             cmd=sys.executable,
-    #             args=["-m", "yatcc_ol.run.watch_students"],
-    #             cwd=CONFIG.app_dir,
-    #             resumable=False,
-    #             loop_cycle=await student.WATCHING_INTERVAL.get(),
-    #         ),
-    #     ),
-    # ):
-    #     PROGRESS("已提交学生监控例程", logger=LOGGER)
-    # else:
-    #     PROGRESS("提交学生监控例程失败", logger=LOGGER)
-
-    # TODO 服务健康检查？
+    while True:
+        try:
+            await student.CODESPACE.watch_all()
+        except Exception as e:
+            LOGGER.error(f"监控学生代码空间时发生错误: {e}")
+        await aio.sleep(60)  # 每60秒检查一次
 
 
 # ==================================================================================== #
