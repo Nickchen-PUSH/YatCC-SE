@@ -373,28 +373,6 @@ async def codespace_info():
         raise ErrorResponse(Response("获取代码空间信息失败", status=500))
 
 
-@WSGI.post(
-    "/codespace/keepalive",
-    tags=[_TAG_CODESPACE],
-    responses={
-        200: {"description": "成功"},
-        202: {"description": "代码空间不在运行"},
-        **_CHECK_API_KEY_RESPONSES,
-    },
-    security=_SECURITY,
-)
-async def codespace_keepalive():
-    """保持代码空间活跃，防止超时"""
-    account = await check_api_key()
-    try:
-        if not await core.student.CODESPACE.is_running(account):
-            return Response("代码空间不在运行", status=202)
-        await core.student.CODESPACE.keep_alive(account)
-        return _OK
-    except Exception as e:
-        LOGGER.error(f"保持代码空间活跃失败: {account}, 错误: {e}")
-        return Response("保持代码空间活跃失败", status=500)
-
 
 # ==================================================================================== #
 
