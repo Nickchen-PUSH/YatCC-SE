@@ -72,7 +72,7 @@ async def check_api_key():
     if api_key is None:
         api_key = request.args.get("ADM-API-KEY")
 
-    if not api_key == await admin.API_KEY.get():
+    if api_key is None:
         raise ErrorResponse(
             Response(
                 "UNAUTHORIZED: please set the 'ADM-API-KEY'"
@@ -80,6 +80,15 @@ async def check_api_key():
                 status=401,
             )
         )
+
+    if not api_key == await admin.API_KEY.get():
+        raise ErrorResponse(
+            Response(
+                "FORBIDDEN: incorrect API-KEY",
+                status=403,
+            )
+        )
+
 
 
 _CHECK_API_KEY_RESPONSES = {
@@ -132,9 +141,10 @@ class StudentDetail(StudentBrief):
             last_watch=stu.codespace.last_watch,
         )
 
-
+class DetailPath(BaseModel):
+    sid: str = student.Student.model_fields["sid"]
 @WSGI.get(
-    "/student/<id>",
+    "/student/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {
@@ -147,14 +157,14 @@ class StudentDetail(StudentBrief):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_detail(id: str):
+async def student_detail(path: DetailPath):
     """获取学生详细信息"""
     await check_api_key()
     try:
-        student_data = await student.TABLE.read(id)
+        student_data = await student.TABLE.read(path.sid)
     except student.StudentNotFoundError:
         raise ErrorResponse(Response("Student not found", status=404))
-    return 200, StudentDetail.from_student(student_data)
+    return StudentDetail.from_student(student_data).model_dump(), 200
 
 
 @WSGI.get(
@@ -177,7 +187,13 @@ async def student_detail(id: str):
 )
 async def student_list():
     """获取学生列表"""
-    pass
+    await check_api_key()
+    students = [
+        StudentBrief.from_student(stu).model_dump()
+        async for stu in student.TABLE.iter_all()
+    ]
+    
+    return students, 200
 
 
 class StudentCreate(StudentBrief):
@@ -232,21 +248,18 @@ async def create_student(body: RootModel[list[StudentCreate]]):
             )
             stu.reset_password(stu_data.pwd)
             await student.TABLE.create(stu)
-            success.append(StudentBrief.from_student(stu))
+            success.append(StudentBrief.from_student(stu).model_dump())
         except Exception as e:
             failed.append({"id": stu.sid, "reason": str(e)})
-    return 200, {
+    return {
         "success": success,
         "failed": failed,
     }
 
 
-# TODO
-
-
 # 批量删除学生API
 class StudentDelete(BaseModel):
-    id: str = Field(..., description="学生ID")
+    sid: str = Field(..., description="学生ID")
 
 
 @WSGI.delete(
@@ -284,7 +297,19 @@ class StudentDelete(BaseModel):
 )
 async def batch_delete_student(body: RootModel[list[StudentDelete]]):
     """批量删除学生"""
-    pass
+    await check_api_key()
+    success = []
+    failed = []
+    for stu_data in body.root:
+        try:
+            await student.TABLE.delete(stu_data.sid)
+            success.append(stu_data.sid)
+        except Exception as e:
+            failed.append({"id": stu_data.sid, "reason": str(e)})
+    return {
+        "success": success,
+        "failed": failed,
+    }
 
 
 # ==================================================================================== #
@@ -292,7 +317,7 @@ async def batch_delete_student(body: RootModel[list[StudentDelete]]):
 
 # 进入学生代码空间 api
 @WSGI.get(
-    "/student/codespace",
+    "/student/codespace/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         302: {"description": "容器正在运行，重定向到学生代码空间页面"},
@@ -302,14 +327,34 @@ async def batch_delete_student(body: RootModel[list[StudentDelete]]):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace(id: str):
+async def student_codespace(path: DetailPath):
     """进入学生代码空间（重定向）"""
-    pass
+    await check_api_key()
+    try:
+        # 检查学生是否存在
+        student_data = await student.TABLE.read(path.sid)
+        
+        # 获取代码空间状态和URL
+        status = await student.CODESPACE.get_status(path.sid)
+        url = await student.CODESPACE.get_url(path.sid)
+        
+        if status == "running" and url:
+            # 代码空间正在运行且有URL，重定向到代码空间
+            return redirect(url, code=302)
+        elif status == "starting" or url is True:
+            # 代码空间正在启动中，重定向到管理页面
+            return redirect(f"/student/codespace/manage/{path.sid}", code=307)
+        else:
+            # 其他情况重定向到管理页面
+            return redirect(f"/student/codespace/manage/{path.sid}", code=303)
+            
+    except student.StudentNotFoundError:
+        raise ErrorResponse(Response("Student not found", status=404))
 
 
 # 开启学生代码空间 api
 @WSGI.post(
-    "/student/codespace",
+    "/student/codespace/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "启动操作成功"},
@@ -319,14 +364,27 @@ async def student_codespace(id: str):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace_start(id: str):
+async def student_codespace_start(path: DetailPath):
     """启动学生代码空间，立即返回，不会等待代码空间启动完成"""
-    pass
+    await check_api_key()
+    try:
+        status=await student.CODESPACE.get_status(path.sid)
+        if status=="running":
+            return Response("代码空间已启动", status=202)
+    except student.StudentNotFoundError:
+        return Response("Student not found", status=404)
+    try:
+        await student.CODESPACE.start(path.sid)
+        return _OK
+    except student.CodespaceQuotaExceededError:
+        return Response("代码空间配额已耗尽", status=402)
+    
+
 
 
 # 关闭学生代码空间 api
 @WSGI.delete(
-    "/student/codespace",
+    "/student/codespace/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "停止操作成功"},
@@ -335,14 +393,22 @@ async def student_codespace_start(id: str):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace_stop(id: str):
+async def student_codespace_stop(path: DetailPath):
     """停止学生代码空间，立即返回，不会等待代码空间停止完成"""
-    pass
+    await check_api_key()
+    try:
+        status=await student.CODESPACE.get_status(path.sid)
+        if status=="stopped":
+            return Response("代码空间不在运行", status=202)
+    except student.StudentNotFoundError:
+        return Response("学生不存在", status=404)
+    await student.CODESPACE.stop(path.sid)
+    return _OK
 
 
 # 获取学生代码空间信息 api
 @WSGI.get(
-    "/student/info",
+    "/student/codespace/info/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {
@@ -357,14 +423,19 @@ async def student_codespace_stop(id: str):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace_info(id: str):
+async def student_codespace_info(path: DetailPath):
     """获取学生代码空间信息"""
-    pass
+    await check_api_key()
+    try:
+        student_data=await student.TABLE.read(path.sid)
+        return StudentDetail.from_student(student_data).model_dump(),200
+    except student.StudentNotFoundError:
+        return Response("学生不存在", status=404)
 
 
 # 保持学生代码空间活跃 api
 @WSGI.post(
-    "/student/keepalive",
+    "/student/keepalive/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "保持活跃操作成功"},
@@ -373,7 +444,7 @@ async def student_codespace_info(id: str):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def student_codespace_keepalive(id: str):
+async def student_codespace_keepalive(path: DetailPath):
     """保持学生代码空间活跃，防止超时"""
     pass
 
@@ -416,7 +487,25 @@ class CodespaceBatchOperation(BaseModel):
 )
 async def batch_start_codespace(body: CodespaceBatchOperation):
     """批量启动多个学生的代码空间"""
-    pass
+    await check_api_key()
+    success = []
+    failed = []
+    for sid in body.ids:
+        try:
+            status = await student.CODESPACE.get_status(sid)
+            if status == "running":
+                failed.append({"id": sid, "reason": "代码空间已在运行"})
+                continue
+            await student.CODESPACE.start(sid)
+            success.append(sid)
+        except student.StudentNotFoundError:
+            failed.append({"id": sid, "reason": "学生不存在"})
+        except student.CodespaceQuotaExceededError:
+            failed.append({"id": sid, "reason": "代码空间配额已耗尽"})
+    return {
+        "success": success,
+        "failed": failed,
+    }, 200
 
 
 # 批量停止代码空间API
@@ -452,7 +541,23 @@ async def batch_start_codespace(body: CodespaceBatchOperation):
 )
 async def batch_stop_codespace(body: CodespaceBatchOperation):
     """批量停止多个学生的代码空间"""
-    pass
+    await check_api_key()
+    success = []
+    failed = []
+    for sid in body.ids:
+        try:
+            status = await student.CODESPACE.get_status(sid)
+            if status == "stopped":
+                failed.append({"id": sid, "reason": "代码空间不在运行"})
+                continue
+            await student.CODESPACE.stop(sid)
+            success.append(sid)
+        except student.StudentNotFoundError:
+            failed.append({"id": sid, "reason": "学生不存在"})
+    return {
+        "success": success,
+        "failed": failed,
+    }, 200
 
 
 # 调整学生代码空间配额API
@@ -462,7 +567,7 @@ class CodespaceQuota(BaseModel):
 
 
 @WSGI.put(
-    "/student/codespace/quota",
+    "/student/codespace/quota/<sid>",
     tags=[_TAG_STUDENT],
     responses={
         200: {"description": "配额调整成功"},
@@ -470,9 +575,18 @@ class CodespaceQuota(BaseModel):
         **_CHECK_API_KEY_RESPONSES,
     },
 )
-async def update_student_codespace_quota(id: str, body: CodespaceQuota):
+async def update_student_codespace_quota(path: DetailPath, body: CodespaceQuota):
     """调整学生代码空间配额"""
-    pass
+    await check_api_key()
+    try:
+        # 检查学生是否存在
+        student_data = await student.TABLE.read(path.sid)
+        # 暂时不支持空间配额调整
+        student_data.codespace.time_quota = body.time_quota
+        await student.TABLE.write(student_data)
+        return _OK
+    except student.StudentNotFoundError:
+        return Response("学生不存在", status=404)
 
 
 # ==================================================================================== #
