@@ -1,3 +1,4 @@
+#!python3
 """CODESPACE 项目工具"""
 
 from argparse import ArgumentParser
@@ -7,6 +8,9 @@ argps = argp.add_subparsers(dest="subcmd")
 argp_build = argps.add_parser("build", help="执行构建")
 
 argp_run = argps.add_parser("run", help="运行构建出的镜像")
+argp_run.add_argument(
+    "--sshd", type=int, default=2222, help="指定 SSHD 端口（默认 22）"
+)
 argp_run.add_argument(
     "--code-server", type=int, default=6443, help="指定 code-server 端口"
 )
@@ -49,7 +53,7 @@ async def _build() -> int:
 def _run() -> int:
     from run.codespace import run
 
-    ARG_SSHD: int = 22
+    ARG_SSHD: int = ARGS.sshd
     ARG_CODE_SERVER: int = ARGS.code_server
     ARG_IO: str | None = ARGS.io
     ARG_ROOT: str | None = ARGS.root

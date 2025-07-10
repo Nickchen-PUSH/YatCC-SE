@@ -1,4 +1,4 @@
-#!/app/venv/bin/python3
+#!python3
 """学生管理工具"""
 
 from argparse import ArgumentParser
@@ -45,7 +45,7 @@ if ARG_SUBCMD is None:
 import os
 import sys
 
-sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.."))
+sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.." * 2))
 
 import base
 from run import __run__
@@ -170,8 +170,9 @@ async def _password() -> int:
 
 async def _main() -> int:
     from core import ainit
+    from config import ENVIRON
 
-    await ainit(cluster_mock=True)
+    await ainit(cluster_mock=ENVIRON.mock_cluster)
     return await {
         "list": _list,
         "query": _query,
