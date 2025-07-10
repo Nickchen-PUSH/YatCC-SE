@@ -14,12 +14,10 @@ declare module 'vue' {
     EditInfoDialog: typeof import('./src/components/UserInfoPanel/EditInfoDialog.vue')['default']
     ElButton: typeof import('element-plus/es')['ElButton']
     ElCard: typeof import('element-plus/es')['ElCard']
-    ElCheckbox: typeof import('element-plus/es')['ElCheckbox']
     ElDialog: typeof import('element-plus/es')['ElDialog']
     ElDivider: typeof import('element-plus/es')['ElDivider']
     ElForm: typeof import('element-plus/es')['ElForm']
     ElFormItem: typeof import('element-plus/es')['ElFormItem']
-    ElIcon: typeof import('element-plus/es')['ElIcon']
     ElInput: typeof import('element-plus/es')['ElInput']
     ElLink: typeof import('element-plus/es')['ElLink']
     ElProgress: typeof import('element-plus/es')['ElProgress']
@@ -31,8 +29,5 @@ declare module 'vue' {
     StatusInfo: typeof import('./src/components/StatusPanel/StatusInfo.vue')['default']
     StatusPanel: typeof import('./src/components/StatusPanel/StatusPanel.vue')['default']
     UserInfoPanel: typeof import('./src/components/UserInfoPanel/UserInfoPanel.vue')['default']
-  }
-  export interface ComponentCustomProperties {
-    vLoading: typeof import('element-plus/es')['ElLoadingDirective']
   }
 }

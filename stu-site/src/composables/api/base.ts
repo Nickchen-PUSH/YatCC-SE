@@ -23,7 +23,7 @@ async function request({
     handleUnauthorized()
     return null
   } else {
-    headers.append('yatcc-api-key', getToken() || '')
+    headers.append('X-API-KEY', getToken() || '')
   }
 
   // 设置请求体
