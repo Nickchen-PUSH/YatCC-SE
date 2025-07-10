@@ -12,7 +12,7 @@ export async function login(sid: string, pwd: string): Promise<'Ok' | 'Failed' |
   if (!response) {
     return 'Error'
   }
-  if (response.status === 201) {
+  if (response.status === 200) {
     const api_key = await response.text()
     setToken(api_key)
     return 'Ok'

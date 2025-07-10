@@ -82,9 +82,7 @@ WSGI.register_error_handler(core.student.StudentNotFoundError, _handle_403)
 WSGI.register_error_handler(Exception, _handle_exception)
 
 
-@WSGI.route("/")
-def index():
-    return redirect("/static/index.html")
+
 
 
 # ==================================================================================== #
@@ -375,7 +373,10 @@ async def codespace_info():
 
 
 # ==================================================================================== #
-
+@WSGI.route("/")
+@WSGI.route('/<path:path>')
+def index(path=None):
+    return redirect("/static/index.html")
 
 def wsgi():
     import base.logger as logger

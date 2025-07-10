@@ -29,7 +29,7 @@ const pwdVisible = ref(false)
   <div class="flex flex-col gap-6 h-full flex-1">
 
     <div>
-      <label class="text-gray-500 dark:text-gray-400">当前状态:</label>
+      <label class="text-gray-500 dark:text-gray-400">当前状态：</label>
       <el-tag :type="statusType">{{ status }}</el-tag>
     </div>
   <!-- 链接部分 -->
@@ -38,8 +38,8 @@ const pwdVisible = ref(false)
       <div class="i-mdi:link mr-1 text-20px" />
       链接：
     </label>
-    <el-link type="primary" :href="codespaceInfo.access_url" target="_blank" class="!text-16px">
-      {{ codespaceInfo.access_url }}
+    <el-link type="primary" :href="typeof codespaceInfo.access_url === 'boolean' ? '' : codespaceInfo.access_url" target="_blank" class="text-16px">
+      {{ typeof codespaceInfo.access_url === 'boolean' ? '' : codespaceInfo.access_url }}
     </el-link>
   </div>
   <!-- 密码部分 -->
