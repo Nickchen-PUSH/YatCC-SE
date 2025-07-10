@@ -1,0 +1,95 @@
+#!python3
+"""YATCC-SE项目工具"""
+from argparse import ArgumentParser
+
+argp = ArgumentParser(description=__doc__)
+argps = argp.add_subparsers(dest="subcmd")
+
+argp_dev = argps.add_parser("dev", help="启动开发用服务")
+
+argp_build = argps.add_parser("build", help="执行构建")
+
+argp_run = argps.add_parser("run", help="运行构建出的镜像")
+argp_run.add_argument("--sshd", type=int, default=5022, help="指定 SSHD 端口")
+argp_run.add_argument("--svc-adm", type=int, default=5001, help="指定管理员服务端口")
+argp_run.add_argument("--svc-stu", type=int, default=5002, help="指定学生服务端口")
+argp_run.add_argument("--io", help="指定 /io 挂载目录")
+argp_run.add_argument("args", nargs="*", help="传递给容器的参数")
+
+argp_upload = argps.add_parser("upload", help="上传构建出的镜像")
+
+ARGS = argp.parse_args()
+ARG_SUBCMD: str = ARGS.subcmd
+if ARG_SUBCMD is None:
+    argp.print_help()
+    exit(1)
+
+
+# ==================================================================================== #
+
+import os
+import sys
+
+sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.."))
+
+import base
+from run import __run__
+
+RUNNING_DIR, LOGGER, PROGRESS = __run__(
+    __spec__, __file__, time_tree=ARG_SUBCMD not in {"dev", "run"}
+)
+
+
+# ==================================================================================== #
+
+
+async def _build() -> int:
+    from run.yatcc_se import build
+
+    await build()
+    return 0
+
+
+def _run() -> int:
+    from run.yatcc_se import run
+
+    ARG_SSHD: int = ARGS.sshd
+    ARG_SVC_ADM: int = ARGS.svc_adm
+    ARG_SVC_STU: int = ARGS.svc_stu
+    ARG_IO: str | None = ARGS.io
+    ARG_ARGS: list[str] = ARGS.args
+
+    if ARG_IO is None:
+        io_dir = RUNNING_DIR / "io"
+    else:
+        io_dir = base.Path(ARG_IO)
+    io_dir.mkdir(parents=True, exist_ok=True)
+    return run(ARG_SSHD, ARG_SVC_ADM, ARG_SVC_STU, io_dir, *ARG_ARGS)
+
+
+async def _upload() -> int:
+    from run.yatcc_se import upload
+
+    await upload()
+    return 0
+
+
+
+def _dev() -> int:
+    from run.yatcc_se import dev
+    return dev()
+
+
+if ARG_SUBCMD == "dev":
+    exit(_dev())
+elif ARG_SUBCMD == "run":
+    exit(_run())
+else:
+    exit(
+        base.RUNNER.run(
+            {
+                "build": _build,
+                "upload": _upload,
+            }[ARG_SUBCMD]()
+        )
+    )

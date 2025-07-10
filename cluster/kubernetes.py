@@ -91,6 +91,7 @@ class KubernetesSpec:
         return {
             "name": "code-server",
             "image": self.job_params.image,
+            "imagePullPolicy": "Never",
             "ports": [
                 {"containerPort": item.port, "name": item.name}
                 for item in self.job_params.ports
@@ -120,7 +121,7 @@ class KubernetesSpec:
             {
                 "name": name,
                 "hostPath": {
-                    "path": f"{CONFIG.CORE.students_dir}/{self.job_params.user_id}/{name}",
+                    "path": f"{CONFIG.CORE.students_dir}{self.job_params.user_id}/{name}",
                     "type": "DirectoryOrCreate",
                 },
             }

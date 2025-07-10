@@ -21,6 +21,9 @@ async def start() -> None:
     assert CONFIG.log_dir.endswith("/")
 
     ######
+    os.makedirs(CONFIG.run_dir, exist_ok=True)
+    # 确保运行时目录存在，Redis 和 SSHD 都需要这个目录
+    # 运行时目录用于存放 PID 文件和 Unix 套接字等
     os.makedirs(CONFIG.log_dir, exist_ok=True)
     CONFIG.markdown(CONFIG.log_dir + "config.md")
 
@@ -31,8 +34,9 @@ async def start() -> None:
         PROGRESS("SSH 服务已禁用", logger=LOGGER)
     else:
         with PROGRESS["启动 SSH 服务", LOGGER]:
-            os.makedirs("/run/sshd", exist_ok=True)
-            # sshd 需要 /run/sshd 目录来权限分离
+            sshd_run_dir = CONFIG.io_dir + "run/sshd"
+            os.makedirs(sshd_run_dir, exist_ok=True)
+            # sshd 需要这个目录来权限分离
 
             ssh_log = CONFIG.log_dir + "sshd.log"
             os.mknod(rmfile(ssh_log), 0o644)
@@ -44,6 +48,7 @@ async def start() -> None:
                 "-D",
                 *["-E", ssh_log],
                 *["-f", mk_sshd_config()],
+                *["-o", f"PidFile={CONFIG.io_dir}run/sshd.pid"],
                 cwd=CONFIG.io_dir,
                 stdout=CONFIG.log_dir + "sshd.out.start",
                 stderr=CONFIG.log_dir + "sshd.err.start",
@@ -92,8 +97,10 @@ async def start() -> None:
     ######
     global SVC_ADM, SVC_STU
     with PROGRESS["启动管理员和学生的 Web 服务", LOGGER]:
-        rmfile("/run/svc_adm.pid")
-        rmfile("/run/svc_stu.pid")
+        svc_adm_pid = CONFIG.io_dir + "run/svc_adm.pid"
+        svc_stu_pid = CONFIG.io_dir + "run/svc_stu.pid"
+        rmfile(svc_adm_pid)
+        rmfile(svc_stu_pid)
         # 删除可能残留的 PID 文件，这会导致 Gunicorn 启动失败
 
         SVC_ADM, SVC_STU = await aio.gather(
@@ -104,7 +111,7 @@ async def start() -> None:
                 *["-b", "0.0.0.0:5001"],
                 # TODO HTTPS 测试未通过，暂时使用 HTTP
                 *["-w", str(CONFIG.ENTRY.svc_adm_workers)],
-                *["-p", "/run/svc_adm.pid"],
+                *["-p", svc_adm_pid],
                 *["--access-logfile", CONFIG.log_dir + "svc_adm.access.log"],
                 *["--error-logfile", CONFIG.log_dir + "svc_adm.error.log"],
                 "svc_adm:wsgi()",
@@ -118,7 +125,7 @@ async def start() -> None:
                 *["-m", "gunicorn"],
                 *["-b", "0.0.0.0:5002"],
                 *["-w", str(CONFIG.ENTRY.svc_stu_workers)],
-                *["-p", "/run/svc_stu.pid"],
+                *["-p", svc_stu_pid],
                 *["--access-logfile", CONFIG.log_dir + "svc_stu.access.log"],
                 *["--error-logfile", CONFIG.log_dir + "svc_stu.error.log"],
                 "svc_stu:wsgi()",
@@ -150,7 +157,6 @@ async def stop():
 
     ######
     global REDIS_SERVER
-    from . import core
 
     with PROGRESS["停止 Redis 服务", LOGGER]:
         redis_ok, redis_res = await entry.stop_subp(REDIS_SERVER, timeout=3)
@@ -203,13 +209,16 @@ def mk_redis_config() -> str:
         f.write(
             dedent(
                 f"""
+                # 禁用网络端口，使用 Unix 套接字
+                port 0
+                unixsocket {CONFIG.io_dir}run/redis.sock
+                unixsocketperm 755
                 bind 127.0.0.1 -::1
-                port 6379
                 tcp-backlog 511
                 timeout 0
                 tcp-keepalive 300
                 daemonize no
-                pidfile /run/redis.pid
+                pidfile {CONFIG.io_dir}run/redis.pid
                 loglevel notice
                 logfile "{CONFIG.log_dir + "redis.log"}"
                 """

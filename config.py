@@ -18,11 +18,13 @@ ENVIRON = Environ
 
 
 class Executable(Configuration):
-    rm = "/usr/bin/rm"
-    cp = "/usr/bin/cp"
-    wget = "/usr/bin/wget"
+    rm = "/bin/rm"
+    cp = "/bin/cp"
+    tar = "/usr/bin/tar"
+    npm = "/opt/homebrew/bin/npm"
+    wget = "/opt/homebrew/bin/wget"
     docker = "/usr/local/bin/docker"
-    redis_server = "/usr/bin/redis-server"
+    redis_server = "/opt/homebrew/bin/redis-server"
     sshd = ""
 
 
@@ -39,6 +41,8 @@ class Config(Configuration):
     """输入输出目录，必须以 / 结尾"""
     log_dir = io_dir + "log/"
     """日志目录，必须以 / 结尾"""
+    run_dir = io_dir + "run/"
+    """运行时目录，必须以 / 结尾"""
     log_level = 1
     """日志级别"""
     api_key_secret = b"\x00" * 32
@@ -49,13 +53,13 @@ class Config(Configuration):
 
     CLUSTER: type["ClusterConfig"]
     """集群配置"""
-    
+
     ENTRY: type["Entry"]
     """入口程序配置"""
-    
+
     SVC_STU: type["SvcStu"]
     """学生服务配置"""
-    
+
     SVC_ADM: type["SvcAdm"]
     """管理员服务配置"""
 
@@ -65,8 +69,7 @@ CONFIG = Config
 
 class Core(Configuration):
     redis_init: dict = {
-        "host": "localhost",
-        "port": 6379,
+        "unix_socket_path": Config.io_dir + "run/redis.sock",
         "decode_responses": False,
     }
     """Redis 初始化参数"""
@@ -80,6 +83,7 @@ class Core(Configuration):
 CONFIG.CORE = Core
 
 # ==================================================================================== #
+
 
 class SvcStu(Configuration):
     static_dir = str(PROJECT_DIR / "stu-site/dist")
@@ -98,6 +102,7 @@ CONFIG.SVC_ADM = SvcAdm
 
 
 # ==================================================================================== #
+
 
 class Entry(Configuration):
     redis_executable: str = ENVIRON.EXECUTABLE.redis_server if ENVIRON else ""
@@ -137,7 +142,7 @@ class ClusterConfig(Configuration):
     class Codespace(Configuration):
         """codespace 配置"""
 
-        IMAGE = "docker.io/codercom/code-server:latest"
+        IMAGE = "codercom/code-server:latest"
         DEFAULT_PASSWORD = "student123"
         DEFAULT_CPU_LIMIT = "1000m"
         DEFAULT_MEMORY_LIMIT = "2Gi"
