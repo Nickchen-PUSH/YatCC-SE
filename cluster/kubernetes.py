@@ -93,16 +93,11 @@ class KubernetesSpec:
             "image": self.job_params.image,
             "imagePullPolicy": "Never",
             "ports": [
-                {"containerPort": item.port, "name": item.name}
+                {"containerPort": item.target_port, "name": item.name}
                 for item in self.job_params.ports
             ],
             "env": [{"name": k, "value": v} for k, v in self.job_params.env.items()],
-            "args": [
-                "--bind-addr=0.0.0.0:8080",
-                "--auth=password",
-                "--disable-telemetry",
-                "/workspace",
-            ],
+            "args": [],
             "volumeMounts": self._build_volume_mounts(),
             "resources": self._build_resources(),
             # "readinessProbe": self._build_probe(),
@@ -111,7 +106,7 @@ class KubernetesSpec:
 
     def _build_volume_mounts(self) -> List[Dict[str, str]]:
         return [
-            {"name": "code", "mountPath": "/workspace"},
+            {"name": "code", "mountPath": "/code"},
             {"name": "io", "mountPath": "/io"},
             {"name": "root", "mountPath": "/data"},
         ]
@@ -141,7 +136,7 @@ class KubernetesSpec:
 
     def _build_probe(self, initial_delay: int = 30, period: int = 10) -> Dict[str, Any]:
         return {
-            "httpGet": {"path": "/", "port": 8080},  # HTTP 健康检查路径
+            "httpGet": {"path": "/", "port": 443},  # HTTP 健康检查路径
             "initialDelaySeconds": initial_delay,
             "periodSeconds": period,
         }

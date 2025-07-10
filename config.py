@@ -142,15 +142,15 @@ class ClusterConfig(Configuration):
     class Codespace(Configuration):
         """codespace 配置"""
 
-        IMAGE = "codercom/code-server:latest"
+        IMAGE = "nickchencoffee/codespace:aarch64"
         DEFAULT_PASSWORD = "student123"
         DEFAULT_CPU_LIMIT = "1000m"
         DEFAULT_MEMORY_LIMIT = "2Gi"
         DEFAULT_STORAGE_SIZE = "5Gi"
         PORT = [
             {
-                "port": 8080,
-                "targetPort": 8080,
+                "port": 443,
+                "targetPort": 443,
                 "name": "http",
             },
             {

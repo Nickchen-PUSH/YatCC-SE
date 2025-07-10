@@ -259,6 +259,9 @@ class TABLE:
             await CODESPACE.allocate(sid=stu.sid)
         except Exception as e:
             LOGGERR.error(f"Failed to allocate resources for student {stu.sid}: {e}")
+            os.rmdir(stu_path + "code/")
+            os.rmdir(stu_path + "io/")
+            os.rmdir(stu_path + "root/")
             raise Error(f"Failed to allocate resources for student {stu.sid}")
 
         stu.codespace.status = CodespaceStatus.STOPPED
@@ -647,7 +650,7 @@ class CODESPACE:
             name=f"codespace-{sid}",
             image=CONFIG.CLUSTER.Codespace.IMAGE,
             ports=[
-                cluster.PortParams(**port) for port in CONFIG.CLUSTER.Codespace.PORT
+                cluster.PortParams.from_config(port) for port in CONFIG.CLUSTER.Codespace.PORT
             ],
             env={
                 "PASSWORD": api_key_enc(sid),
