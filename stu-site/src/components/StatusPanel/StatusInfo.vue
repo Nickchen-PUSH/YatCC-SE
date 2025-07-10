@@ -38,8 +38,8 @@ const pwdVisible = ref(false)
       <div class="i-mdi:link mr-1 text-20px" />
       链接：
     </label>
-    <el-link type="primary" :href="codespaceInfo.access_url" target="_blank" class="text-16px">
-      {{ codespaceInfo.access_url }}
+    <el-link type="primary" :href="typeof codespaceInfo.access_url === 'boolean' ? '' : codespaceInfo.access_url" target="_blank" class="text-16px">
+      {{ typeof codespaceInfo.access_url === 'boolean' ? '' : codespaceInfo.access_url }}
     </el-link>
   </div>
   <!-- 密码部分 -->
