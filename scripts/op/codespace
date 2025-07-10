@@ -1,0 +1,98 @@
+#!python3
+"""代码空间管理工具"""
+
+from argparse import ArgumentParser
+
+argp = ArgumentParser(description=__doc__)
+argps = argp.add_subparsers(dest="subcmd")
+
+argp_quota = argps.add_parser("quota", help="设定代码空间配额")
+argp_quota.add_argument("sid", type=str, nargs="*", help="学生学号")
+argp_quota.add_argument("time", type=float, help="时间配额（小时）")
+argp_quota.add_argument("-a", "--all", action="store_true", help="所有学生")
+argp_quota.add_argument(
+    "--mode",
+    choices=["abs", "rel"],
+    default="rel",
+    help="""
+    配额设定模式
+    - abs: 绝对配额，直接设置为指定值
+    - rel: 相对配额，增加指定值
+    """,
+)
+
+ARGS = argp.parse_args()
+ARG_SUBCMD: str = ARGS.subcmd
+if ARG_SUBCMD is None:
+    argp.print_help()
+    exit(1)
+
+
+# ==================================================================================== #
+
+import os
+import sys
+
+sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.." * 2))
+
+import base
+from run import __run__
+
+RUNNING_DIR, LOGGER, PROGRESS = __run__(__spec__, __file__)
+
+
+# ==================================================================================== #
+
+from core import student
+
+
+async def _quota() -> int:
+    ARG_SID: list[str] = ARGS.sid
+    ARG_ALL: bool = ARGS.all
+    ARG_MODE: str = ARGS.mode
+    ARG_TIME: float = ARGS.time
+
+    stu_list = []
+    if ARG_ALL:
+        stu_list = await student.TABLE.all_ids()
+    else:
+        stu_list = ARG_SID
+    if not stu_list:
+        PROGRESS("学生列表为空")
+        return 0
+
+    confirmed = input(f"{stu_list}\n确认 (y/n): ")
+    if confirmed.lower() != "y":
+        PROGRESS("操作已取消")
+        return 0
+
+    with PROGRESS:
+        for sid in PROGRESS @ stu_list:
+            try:
+                stu = await student.TABLE.read(sid)
+                match ARG_MODE:
+                    case "abs":
+                        stu.codespace.time_quota = (int)(ARG_TIME * 3600)
+                    case "rel":
+                        stu.codespace.time_quota = (int)(
+                            stu.codespace.time_quota + ARG_TIME * 3600
+                        )
+                await student.TABLE.write(stu)
+                PROGRESS(f"{sid} ({stu.user_info.name!r}): {stu.codespace.time_quota=}")
+            except Exception as e:
+                PROGRESS(f"FAIL {sid}: {e}")
+
+    return 0
+
+
+async def _main() -> int:
+    from core import ainit
+    from config import ENVIRON
+
+    await ainit(cluster_mock=ENVIRON.mock_cluster)
+    return await {
+        "quota": _quota,
+    }[ARG_SUBCMD]()
+
+
+exit(base.RUNNER.run(_main()))
