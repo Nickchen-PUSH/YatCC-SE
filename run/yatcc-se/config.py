@@ -6,7 +6,7 @@ from base import Configuration
 
 class Environ(Configuration):
     is_k8s = "KUBERNETES_SERVICE_HOST" in os.environ
-    mock_cluster = not is_k8s
+    mock_cluster = False
 
 
 ENVIRON = Environ()
@@ -92,7 +92,7 @@ class ClusterConfig(Configuration):
     class Codespace(Configuration):
         """codespace 配置"""
 
-        IMAGE = "nickchencoffee/codespace:aarch64"
+        IMAGE = "crpi-p0o30thhhjjucg78.cn-guangzhou.personal.cr.aliyuncs.com/nickchen-aliyun/codespace.ci:latest"
         DEFAULT_PASSWORD = "student123"
         DEFAULT_CPU_LIMIT = "1000m"
         DEFAULT_MEMORY_LIMIT = "2Gi"
