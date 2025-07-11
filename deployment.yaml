@@ -1,0 +1,120 @@
+# 1. ServiceAccount: 为我们的应用 Pod 创建一个专用的身份
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: yatcc-app-sa
+  namespace: default # 确保和您的 Deployment 在同一个 namespace
+
+---
+# 2. Role: 定义权限，明确允许对哪些资源进行哪些操作
+#    这是解决 "容器内调用k8s api要权限" 的关键
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: codespace-manager-role
+  namespace: default
+rules:
+- apiGroups: ["", "apps", "batch"]
+  resources:
+  # 根据 cluster/kubernetes.py 的需要，添加所需资源的权限
+  - pods
+  - services
+  - deployments
+  - jobs
+  - persistentvolumeclaims
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+
+---
+# 3. RoleBinding: 将上面的 Role 绑定到 ServiceAccount
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: yatcc-app-rolebinding
+  namespace: default
+subjects:
+- kind: ServiceAccount
+  name: yatcc-app-sa # 绑定到我们创建的 ServiceAccount
+roleRef:
+  kind: Role
+  name: codespace-manager-role # 绑定我们创建的 Role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# 4. PersistentVolumeClaim: 申请持久化存储
+#    这是解决 "学生文件夹的挂载目录路径要设定" 的第一部分
+# apiVersion: v1
+# kind: PersistentVolumeClaim
+# metadata:
+#   name: yatcc-data-pvc
+# spec:
+#   accessModes:
+#     - ReadWriteOnce
+#   resources:
+#     requests:
+#       storage: 1Gi
+# ---
+# 5. Deployment: 部署主应用
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: yatcc-app-deployment
+  namespace: default
+  labels:
+    app: yatcc-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: yatcc-app
+  template:
+    metadata:
+      labels:
+        app: yatcc-app
+    spec:
+      containers:
+      - name: yatcc-app
+        image: allenge007/yatcc-se:latest
+        ports:
+        - containerPort: 5001 # Admin
+        - containerPort: 5002 # Student
+        volumeMounts:
+        - name: data-storage
+          # 将申请到的持久化存储挂载到容器的 /data 目录
+          mountPath: /io
+        env:
+        # 通过环境变量告诉应用，集群类型是 K8s
+        - name: CLUSTER_TYPE
+          value: "kubernetes"
+        - name: MOCK_CLUSTER
+          value: "False"
+        # - name: CORE_STUDENTS_DIR
+        #   value: "/data/io/students/"
+        # - name: CORE_ARCHIVE_STUDENTS_DIR
+        #   value: "/data/io/archive-students/"
+      volumes:
+        - name: data-storage
+          hostPath:
+            path: /data/yatcc-io
+            type: DirectoryOrCreate
+      serviceAccountName: yatcc-app-sa
+
+---
+# 6. Service: 将应用暴露给外部访问
+apiVersion: v1
+kind: Service
+metadata:
+  name: yatcc-app-service
+  namespace: default
+spec:
+  type: LoadBalancer # 使用 LoadBalancer 让云服务商提供公网 IP，或改为 NodePort
+  selector:
+    app: yatcc-app # 匹配我们 Deployment 中的 Pod
+  ports:
+  - name: admin
+    protocol: TCP
+    port: 5001
+    targetPort: 5001
+  - name: student
+    protocol: TCP
+    port: 5002
+    targetPort: 5002
