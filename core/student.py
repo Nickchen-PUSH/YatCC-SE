@@ -652,6 +652,7 @@ class CODESPACE:
             env={
                 "PASSWORD": api_key_enc(sid),
                 "SUDO_PASSWORD": api_key_enc(sid),
+                "STUDENT_API_KEY": api_key_enc(sid),
                 **kwargs.get("env", {}),
             },
             user_id=sid,

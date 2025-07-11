@@ -13,7 +13,7 @@ from typing import Any, List, Optional, Dict
 from kubernetes.client.rest import ApiException
 from dataclasses import dataclass
 
-from config import CONFIG, Config
+from config import CONFIG, ENVIRON
 from . import (
     ClusterABC,
     JobParams,
@@ -63,7 +63,7 @@ class KubernetesSpec:
             "spec": {
                 "selector": {"app": self.job_params.name, **self._build_labels()},
                 "ports": CONFIG.CLUSTER.Codespace.PORT,
-                "type": "NodePort",
+                "type": "LoadBalancer",
             },
         }
 
@@ -91,7 +91,7 @@ class KubernetesSpec:
         return {
             "name": "code-server",
             "image": self.job_params.image,
-            "imagePullPolicy": "IfNotPresent",
+            "imagePullPolicy": "Always",
             "ports": [
                 {"containerPort": item.target_port, "name": item.name}
                 for item in self.job_params.ports
@@ -560,7 +560,15 @@ class KubernetesCluster(ClusterABC):
                 name=f"{job_name}-svc",
                 namespace=CONFIG.CLUSTER.Kubernetes.NAMESPACE,
             )
-
+            # if ENVIRON.deployment_mode == "aliyun":
+            #     # 阿里云模式下使用 LoadBalancer 类型的 Service
+            #     if service.status.load_balancer.ingress:
+            #         ingress = service.status.load_balancer.ingress[0]
+            #         if ingress.ip:
+            #             return f"http://{ingress.ip}:{service.spec.ports[0].port}"
+            #         elif ingress.hostname:
+            #             return f"http://{ingress.hostname}:{service.spec.ports[0].port}"
+            # else:
             # 检查是否已有端口转发
             if job_name in self._port_forwards:
                 forward_info = self._port_forwards[job_name]
@@ -595,7 +603,7 @@ class KubernetesCluster(ClusterABC):
                 )
             if not service_url:
                 raise ClusterError(
-                    f"Failed to create port forward for {job_name}, no valid HTTP port found"
+                    f"Failed to get service URL for job {job_name}"
                 )
             return service_url
         except ApiException as e:

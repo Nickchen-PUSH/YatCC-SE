@@ -21,7 +21,9 @@ RUN apt-get install -y qemu-system
 # AMD64
 RUN apt-get install -y libc6-dev-i386
 COPY run/codespace/CODESPACE /CODESPACE
-COPY codespace/ /app
+RUN mkdir -p /app
+COPY codespace/ /app/codespace/
+COPY base/ /app/base/
 WORKDIR /app
 RUN rm -rf /tmp/*
 
