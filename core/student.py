@@ -677,6 +677,8 @@ class CODESPACE:
             
             # 检查是否超出时间配额
             if student.codespace.time_quota > 0:
+                if student.codespace.last_watch == 0:
+                    student.codespace.last_watch = student.codespace.last_active
                 current_usage = now - student.codespace.last_watch
                 student.codespace.last_watch = now
                 student.codespace.time_used += current_usage
