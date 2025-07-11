@@ -34,8 +34,8 @@ class CodespaceInfo(BaseModel):
     status: CodespaceStatus = Field(CodespaceStatus.STOPPED, description="代码空间状态")
     url: str = Field("", description="代码空间URL")
 
-    time_quota: int = Field(0, description="代码空间时间配额（秒）")
-    time_used: int = Field(0, description="代码空间已使用时间（秒）")
+    time_quota: float = Field(0, description="代码空间时间配额（秒）")
+    time_used: float = Field(0, description="代码空间已使用时间（秒）")
 
     last_start: float = Field(0, description="代码空间最后启动的 POSIX 时间戳")
     last_stop: float = Field(0, description="代码空间最后停止的 POSIX 时间戳")
@@ -178,8 +178,8 @@ class TABLE:
             codespace=CodespaceInfo(
                 status=vmap["codespace.status"],
                 url=vmap["codespace.url"],
-                time_quota=int(vmap["codespace.time_quota"] or 0),
-                time_used=int(vmap["codespace.time_used"] or 0),
+                time_quota=float(vmap["codespace.time_quota"] or 0),
+                time_used=float(vmap["codespace.time_used"] or 0),
                 last_start=float(vmap["codespace.last_start"] or 0),
                 last_stop=float(vmap["codespace.last_stop"] or 0),
                 last_active=float(vmap["codespace.last_active"] or 0),
@@ -447,9 +447,9 @@ class CODESPACE:
             # 计算本次使用的时间并更新总使用时间
             if student.codespace.last_start > 0:
                 used_time = now - student.codespace.last_start
-                student.codespace.time_used += int(used_time)
+                student.codespace.time_used += used_time
                 LOGGERR.info(
-                    f"代码空间使用时间更新: {sid}, +{int(used_time)}秒, 总计{student.codespace.time_used}秒"
+                    f"代码空间使用时间更新: {sid}, +{used_time}秒, 总计{student.codespace.time_used}秒"
                 )
 
             # 保存更新后的学生信息

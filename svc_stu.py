@@ -331,8 +331,8 @@ class CodespaceInfo(BaseModel):
 
     time_quota: float = Field(..., description="时间配额，单位秒")
     time_used: float = Field(..., description="已用时间，单位秒")
-    space_quota: int = Field(..., description="空间配额，单位字节")
-    space_used: int = Field(..., description="已用空间，单位字节")
+    space_quota: float = Field(..., description="空间配额，单位字节")
+    space_used: float = Field(..., description="已用空间，单位字节")
 
 
 @WSGI.get(

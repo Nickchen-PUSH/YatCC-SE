@@ -118,8 +118,8 @@ class StudentBrief(BaseModel):
 class StudentDetail(StudentBrief):
     status: str = student.CodespaceInfo.model_fields["status"]
     url: str = student.CodespaceInfo.model_fields["url"]
-    time_quota: int = student.CodespaceInfo.model_fields["time_quota"]
-    time_used: int = student.CodespaceInfo.model_fields["time_used"]
+    time_quota: float = student.CodespaceInfo.model_fields["time_quota"]
+    time_used: float = student.CodespaceInfo.model_fields["time_used"]
     last_start: float = student.CodespaceInfo.model_fields["last_start"]
     last_stop: float = student.CodespaceInfo.model_fields["last_stop"]
     last_active: float = student.CodespaceInfo.model_fields["last_active"]
