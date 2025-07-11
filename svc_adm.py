@@ -46,6 +46,8 @@ WSGI = AsyncFlask(
             "in": "cookie",
         },
     },
+    static_folder=CONFIG.SVC_ADM.static_dir,
+    static_url_path="/static",
 )
 
 _SECURITY = [
@@ -590,6 +592,12 @@ async def update_student_codespace_quota(path: DetailPath, body: CodespaceQuota)
 
 
 # ==================================================================================== #
+
+@WSGI.route("/")
+@WSGI.route('/<path:path>')
+def index(path=None):
+    return redirect("/static/index.html")
+
 def wsgi():
     import base.logger as logger
     from core import ainit
@@ -608,7 +616,7 @@ if __name__ == "__main__":
 
     argp = ArgumentParser()
     argp.add_argument("--nodbg", action="store_true")
-    argp.add_argument("--port", type=int, default=5002)
+    argp.add_argument("--port", type=int, default=5001)
 
     args = argp.parse_args()
     ARG_NODBG: bool = args.nodbg
