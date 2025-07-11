@@ -13,9 +13,6 @@
       <el-form-item label="密码" prop="pwd">
         <el-input v-model="form.pwd" class="input-field" type="password"></el-input>
       </el-form-item>
-      <el-form-item label="空间配额" prop="space_quota">
-        <SpaceInput v-model="form.space_quota"></SpaceInput>
-      </el-form-item>
       <el-form-item label="时间配额" prop="time_quota">
         <TimeInput v-model="form.time_quota"></TimeInput>
       </el-form-item>
@@ -74,7 +71,6 @@ async function handleSubmit(formEl: FormInstance | undefined) {
           mail: form.value.mail,
           name: form.value.name,
           pwd: form.value.pwd,
-          space_quota: form.value.space_quota,
           time_quota: form.value.time_quota,
         },
       ])

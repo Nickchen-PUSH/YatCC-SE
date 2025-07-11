@@ -18,12 +18,13 @@ function clearAPIKEY() {
 }
 
 function handleUnauthorized() {
-  ElMessageBox.alert('登录过期，请重新登录', '', {
+  ElMessageBox.alert('APIKEY无效,请设置', '', {
     confirmButtonText: '确定',
-    callback: (action: Action) => {
-      router.push('/auth')
+    callback: (_: Action) => {
+      router.push('/account')
     },
-  })
+  },
+)
 }
 
 export { isAuthenticated, setAPIKEY, getAPIKEY, clearAPIKEY, handleUnauthorized }

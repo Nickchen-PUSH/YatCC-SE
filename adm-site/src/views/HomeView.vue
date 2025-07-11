@@ -11,8 +11,7 @@
           </el-sub-menu>
           <el-menu-item index="tasker"> 任务管理 </el-menu-item>
           <el-menu-item index="codespace"> 代码空间管理 </el-menu-item>
-          <el-menu-item index="account"> API-KEY 管理 </el-menu-item>
-          <el-menu-item index="notification"> 通知管理 </el-menu-item>
+          <el-menu-item index="account"> 设置API-KEY </el-menu-item>
         </el-menu>
       </el-aside>
       <el-main><router-view /></el-main>

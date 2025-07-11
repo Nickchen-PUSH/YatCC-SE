@@ -25,11 +25,6 @@
           {{ scope.row.pwd[0] + '******' + scope.row.pwd.slice(-1) }}
         </template>
       </el-table-column>
-      <el-table-column prop="space_quota" label="空间配额">
-        <template #default="scope">
-          {{ formatBytes(scope.row.space_quota) }}
-        </template>
-      </el-table-column>
       <el-table-column prop="time_quota" label="时间配额">
         <template #default="scope">
           {{ formatTime(scope.row.time_quota) }}
@@ -76,10 +71,8 @@ function validateRow(row: string[]) {
   if (!row[3] || row[3].length < 6 || row[3].length > 128) {
     return '密码格式错误'
   }
-  if (!row[4] || !/^[0-9]+$/.test(row[4])) {
-    return '空间配额格式错误'
-  }
-  if (!row[5] || !/^[0-9]+$/.test(row[5])) {
+
+  if (!row[4] || !/^[0-9]+$/.test(row[5])) {
     return '时间配额格式错误'
   }
   return true
@@ -104,8 +97,8 @@ async function handleChange(file: UploadFile) {
         name: row[1],
         mail: row[2],
         pwd: row[3],
-        space_quota: parseInt(row[4]),
-        time_quota: parseInt(row[5]),
+
+        time_quota: parseInt(row[4]),
       }
       data.value.push(parsedRow)
     } else {
@@ -146,8 +139,8 @@ async function handleConfirm() {
 
 function getTemplateUrl() {
   const data = [
-    ['学号', '姓名', '邮箱', '密码', '空间配额（字节）', '时间配额（秒）'],
-    ['00000001', '张三', 'zhangsan@example.com', '123456', '1073741824', '86400'],
+    ['学号', '姓名', '邮箱', '密码', '时间配额（秒）'],
+    ['00000001', '张三', 'zhangsan@example.com', '123456', '86400'],
   ]
 
   const wb = XLSX.utils.book_new()

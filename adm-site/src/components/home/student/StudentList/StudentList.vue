@@ -3,7 +3,6 @@
     <span class="btn-group">
       <h1 class="title">学生列表</h1>
       <el-button @click="refresh">刷新</el-button>
-      <el-button type="warning" @click="showIncQuota = true">增加配额</el-button>
       <el-button type="danger" @click="handleDeleteSelected">删除</el-button>
     </span>
   </div>
@@ -25,7 +24,7 @@
     @change="refresh"
   />
   <DeleteResultDialog v-model="dr_show" :ids="dr_ids" :result="dr_result" />
-  <IncreaseQuota v-model="showIncQuota" :selected="selectedData.map((item) => item.id)" />
+
 </template>
 
 <script setup lang="ts">
@@ -35,7 +34,7 @@ import StudentDetail from './StudentDetail/StudentDetail.vue'
 import { getStudentList, deleteStudents } from '@/api/student'
 import DeleteResultDialog from '@/components/common/ResultDialog.vue'
 import type { ResourceDeletion } from '@/types/api'
-import IncreaseQuota from './IncreaseQuota/IncreaseQuota.vue'
+
 import { ElMessage } from 'element-plus'
 
 const pageSize = 50
@@ -49,13 +48,12 @@ const showIncQuota = ref(false)
 onMounted(refresh)
 
 async function refresh() {
-  // 在这里设置分页大小
-  const res = await getStudentList(page.value - 1, pageSize, {})
+  const res = await getStudentList()
   if (!res) {
     ElMessage.error('获取学生列表失败')
     return
   }
-  total.value = res.total
+  total.value = res.students.length
   tableData.value = res.students
 }
 
