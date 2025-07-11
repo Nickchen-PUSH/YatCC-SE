@@ -91,7 +91,7 @@ class KubernetesSpec:
         return {
             "name": "code-server",
             "image": self.job_params.image,
-            "imagePullPolicy": "Never",
+            "imagePullPolicy": "IfNotPresent",
             "ports": [
                 {"containerPort": item.target_port, "name": item.name}
                 for item in self.job_params.ports
