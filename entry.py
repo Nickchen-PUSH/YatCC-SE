@@ -78,7 +78,6 @@ async def start() -> None:
             else:
                 raise TimeoutError(PROGRESS("Redis 服务启动超时", logger=LOGGER))
             PROGRESS("Redis 服务已就绪", logger=LOGGER)
-
     # integrity_check = False
     # if CONFIG.ENTRY.startup_integrity_check is None:
     #     if not await core.INTEGRITY.get():
@@ -137,7 +136,7 @@ async def start() -> None:
         PROGRESS(f"PID: {SVC_ADM.pid}, {SVC_STU.pid}")
 
     ######
-    aio.create_task(run(), name="run")
+    aio.create_task(run(), name="watcher")
 
 
 async def stop():
@@ -175,7 +174,7 @@ async def stop():
 async def run():
     """在系统运行期间执行"""
 
-    from .core import student
+    from core import student
 
     await aio.sleep(3)  # 等待服务就绪
 
