@@ -100,6 +100,22 @@ async def build():
         )
 
     # PROGRESS(f"==> {tag}")
+def run(
+    sshd_port: int, svc_adm_port: int, svc_stu_port: int, io_dir: Path_t, *args: str
+) -> int:
+    return subp.run(
+        [
+            ENVIRON.EXECUTABLE.docker,
+            *["run", "--rm", "-it"],
+            *["-p", f"{sshd_port}:22"],
+            *["-p", f"{svc_adm_port}:5001"],
+            *["-p", f"{svc_stu_port}:5002"],
+            *["-v", f"{io_dir}:/io"],
+            "yatcc-se:latest",
+            *args,
+        ]
+    ).returncode
+
     
 if __name__ == "__main__":
     build()
