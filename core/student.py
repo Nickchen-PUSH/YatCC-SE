@@ -509,9 +509,6 @@ class CODESPACE:
                 LOGGERR.info(f"获取代码空间状态成功: {sid}, 状态: {status}")
                 return status
 
-                # 确保函数返回最新状态
-                return status
-
             except Exception as e:
                 # 获取作业状态失败，假设作业不存在或已停止
                 LOGGERR.warning(
