@@ -104,7 +104,7 @@ async function refresh() {
 
       </div>
     </template>
-    <div class="flex justify-center items-center gap-8">
+    <div class="flex justify-center items-center gap-8 mb-7">
       <StatusInfo :status="status" :codespace-info="codespaceInfo" />
       <DashBoard :codespace-info="codespaceInfo" />
     </div>

@@ -49,8 +49,11 @@ const handleLogin = async () => {
     <div class="m-auto bg-white dark:bg-#2c2c2c rounded-2xl shadow-lg p-8 w-90vw max-w-400px
              transition-all duration-300 hover:shadow-xl dark:shadow-gray-800/30">
       <!-- 标题部分 -->
-      <div class="text-center mb-6">
-        <h1 class="text-4xl font-bold text-#409EFF mb-2 select-none">YatCC-SE</h1>
+      <div class="flex flex-col items-center text-center mb-6">
+        <h1 class="text-4xl font-bold text-#409EFF mb-2 select-none flex items-center">
+          <img src="../../public/yatcc-se.svg" alt="YatCC Logo" class="h-24 w-24 color-[var(--el-color-primary)]" />
+          YatCC-SE
+        </h1>
       </div>
 
       <!-- 表单部分 -->
