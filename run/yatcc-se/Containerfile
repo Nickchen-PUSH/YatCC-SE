@@ -14,7 +14,7 @@ RUN . venv/bin/activate && pip install \
 FROM venv AS app
 COPY service.tgz stu-site.tgz /tmp/
 COPY yatcc-se/YatCC-SE /YatCC-SE
-RUN chmod +x /YatCC-SE
+
 WORKDIR /app
 RUN tar -xzf /tmp/service.tgz && \
     mkdir -p adm-site stu-site && \
