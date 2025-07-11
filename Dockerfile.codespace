@@ -25,4 +25,4 @@ COPY codespace/ /app
 WORKDIR /app
 RUN rm -rf /tmp/*
 
-# ENTRYPOINT [ "/bin/python3", "/CODESPACE" ]
+ENTRYPOINT [ "/bin/python3", "/CODESPACE" ]
