@@ -97,8 +97,8 @@ spec:
     spec:
       containers:
       - name: yatcc-app
-        image: yatcc-se:latest
-        imagePullPolicy: IfNotPresent
+        image: crpi-p0o30thhhjjucg78.cn-guangzhou.personal.cr.aliyuncs.com/nickchen-aliyun/yatcc-se.ci:latest
+        imagePullPolicy: Always
         ports:
         - containerPort: 22   # SSH
         - containerPort: 5001 # Admin
