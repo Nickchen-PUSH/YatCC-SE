@@ -30,8 +30,7 @@ if ARG_SUBCMD is None:
 import os
 import sys
 
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
+sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.."))
 
 import base
 from run import __run__
