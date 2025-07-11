@@ -90,7 +90,6 @@ async def check_api_key():
         )
 
 
-
 _CHECK_API_KEY_RESPONSES = {
     401: {"description": "未授权，没有提供 API-KEY"},
     403: {"description": "API-KEY 无效"},
@@ -141,8 +140,11 @@ class StudentDetail(StudentBrief):
             last_watch=stu.codespace.last_watch,
         )
 
+
 class DetailPath(BaseModel):
     sid: str = student.Student.model_fields["sid"]
+
+
 @WSGI.get(
     "/student/<sid>",
     tags=[_TAG_STUDENT],
@@ -156,6 +158,7 @@ class DetailPath(BaseModel):
         404: {"description": "学生不存在"},
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def student_detail(path: DetailPath):
     """获取学生详细信息"""
@@ -184,6 +187,7 @@ async def student_detail(path: DetailPath):
         },
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def student_list():
     """获取学生列表"""
@@ -192,7 +196,7 @@ async def student_list():
         StudentBrief.from_student(stu).model_dump()
         async for stu in student.TABLE.iter_all()
     ]
-    
+
     return students, 200
 
 
@@ -233,6 +237,7 @@ class StudentCreate(StudentBrief):
         },
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def create_student(body: RootModel[list[StudentCreate]]):
     """创建学生"""
@@ -294,6 +299,7 @@ class StudentDelete(BaseModel):
         },
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def batch_delete_student(body: RootModel[list[StudentDelete]]):
     """批量删除学生"""
@@ -326,6 +332,7 @@ async def batch_delete_student(body: RootModel[list[StudentDelete]]):
         404: {"description": "学生不存在"},
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def student_codespace(path: DetailPath):
     """进入学生代码空间（重定向）"""
@@ -333,11 +340,11 @@ async def student_codespace(path: DetailPath):
     try:
         # 检查学生是否存在
         student_data = await student.TABLE.read(path.sid)
-        
+
         # 获取代码空间状态和URL
         status = await student.CODESPACE.get_status(path.sid)
         url = await student.CODESPACE.get_url(path.sid)
-        
+
         if status == "running" and url:
             # 代码空间正在运行且有URL，重定向到代码空间
             return redirect(url, code=302)
@@ -347,7 +354,7 @@ async def student_codespace(path: DetailPath):
         else:
             # 其他情况重定向到管理页面
             return redirect(f"/student/codespace/manage/{path.sid}", code=303)
-            
+
     except student.StudentNotFoundError:
         raise ErrorResponse(Response("Student not found", status=404))
 
@@ -363,13 +370,14 @@ async def student_codespace(path: DetailPath):
         402: {"description": "代码空间配额已耗尽"},
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def student_codespace_start(path: DetailPath):
     """启动学生代码空间，立即返回，不会等待代码空间启动完成"""
     await check_api_key()
     try:
-        status=await student.CODESPACE.get_status(path.sid)
-        if status=="running":
+        status = await student.CODESPACE.get_status(path.sid)
+        if status == "running":
             return Response("代码空间已启动", status=202)
     except student.StudentNotFoundError:
         return Response("Student not found", status=404)
@@ -378,8 +386,6 @@ async def student_codespace_start(path: DetailPath):
         return _OK
     except student.CodespaceQuotaExceededError:
         return Response("代码空间配额已耗尽", status=402)
-    
-
 
 
 # 关闭学生代码空间 api
@@ -392,13 +398,14 @@ async def student_codespace_start(path: DetailPath):
         404: {"description": "学生不存在"},
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def student_codespace_stop(path: DetailPath):
     """停止学生代码空间，立即返回，不会等待代码空间停止完成"""
     await check_api_key()
     try:
-        status=await student.CODESPACE.get_status(path.sid)
-        if status=="stopped":
+        status = await student.CODESPACE.get_status(path.sid)
+        if status == "stopped":
             return Response("代码空间不在运行", status=202)
     except student.StudentNotFoundError:
         return Response("学生不存在", status=404)
@@ -422,13 +429,14 @@ async def student_codespace_stop(path: DetailPath):
         404: {"description": "学生不存在"},
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def student_codespace_info(path: DetailPath):
     """获取学生代码空间信息"""
     await check_api_key()
     try:
-        student_data=await student.TABLE.read(path.sid)
-        return StudentDetail.from_student(student_data).model_dump(),200
+        student_data = await student.TABLE.read(path.sid)
+        return StudentDetail.from_student(student_data).model_dump(), 200
     except student.StudentNotFoundError:
         return Response("学生不存在", status=404)
 
@@ -443,6 +451,7 @@ async def student_codespace_info(path: DetailPath):
         404: {"description": "学生不存在"},
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def student_codespace_keepalive(path: DetailPath):
     """保持学生代码空间活跃，防止超时"""
@@ -484,6 +493,7 @@ class CodespaceBatchOperation(BaseModel):
         },
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def batch_start_codespace(body: CodespaceBatchOperation):
     """批量启动多个学生的代码空间"""
@@ -538,6 +548,7 @@ async def batch_start_codespace(body: CodespaceBatchOperation):
         },
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def batch_stop_codespace(body: CodespaceBatchOperation):
     """批量停止多个学生的代码空间"""
@@ -574,6 +585,7 @@ class CodespaceQuota(BaseModel):
         404: {"description": "学生不存在"},
         **_CHECK_API_KEY_RESPONSES,
     },
+    security=_SECURITY,
 )
 async def update_student_codespace_quota(path: DetailPath, body: CodespaceQuota):
     """调整学生代码空间配额"""
