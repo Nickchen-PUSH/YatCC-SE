@@ -32,9 +32,11 @@ if v := os.getenv("YatCC_CS_TESTING"):
 
 
 class Config(Configuration):
-    app_dir = str(PROJECT_DIR) + "/"
+    # app_dir = str(PROJECT_DIR) + "/"
+    app_dir = "/app/"
     """应用程序目录，必须以 / 结尾"""
-    io_dir = str((TESTING_DIR or PROJECT_DIR / "tmp") / "io") + "/"
+    # io_dir = str((TESTING_DIR or PROJECT_DIR / "tmp") / "io") + "/"
+    io_dir = "/io/"
     """输入输出目录，必须以 / 结尾"""
     log_dir = io_dir + "log/"
     """日志目录，必须以 / 结尾"""
@@ -49,7 +51,9 @@ CONFIG = Config
 
 
 class Entry(Configuration):
-    sshd_executable: str | None = ENVIRON.EXECUTABLE.sshd if ENVIRON else None
+    sshd_executable: str | None = (
+        ENVIRON.EXECUTABLE.sshd if ENVIRON else "/usr/sbin/sshd"
+    )
     """SSH 服务可执行程序"""
 
 

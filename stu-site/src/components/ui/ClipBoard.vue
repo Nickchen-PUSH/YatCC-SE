@@ -17,6 +17,7 @@ const copy = () => {
 </script>
 <template>
   <button  @click="copy" class="text-16px rounded border flex p-2 border-gray-300 inline
+  cursor-pointer
   hover:bg-gray-100 transition duration-200 ease-in-out
   dark:hover:bg-gray-800 dark:border-gray-600">
     <div class="i-mdi:content-copy"/>

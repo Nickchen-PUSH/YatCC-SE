@@ -9,7 +9,7 @@ export async function getUserInfo(): Promise<UserInfo | null> {
   if (!response) {
     return null
   }
-  if (response.status === 201) {
+  if (response.status === 200) {
     const data = await response.json()
     return data as UserInfo
   } else {
@@ -23,14 +23,14 @@ export async function resetPassword(
   newPwd: string,
 ): Promise<'Ok' | 'Failed' | 'Error'> {
   const response = await request({
-    route: 'user/password',
-    method: 'PUT',
+    route: 'user',
+    method: 'PATCH',
     data: { old_pwd: oldPwd, new_pwd: newPwd },
   })
   if (!response) {
     return 'Error'
   }
-  if (response.status === 201) {
+  if (response.status === 200) {
     return 'Ok'
   } else {
     return 'Failed'
@@ -47,7 +47,7 @@ export async function updateUserInfo(userInfo: UserInfo): Promise<'Ok' | 'Failed
   if (!response) {
     return 'Error'
   }
-  if (response.status === 201) {
+  if (response.status === 200) {
     return 'Ok'
   } else {
     return 'Failed'

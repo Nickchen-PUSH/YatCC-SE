@@ -44,7 +44,7 @@ class KubernetesClusterTest(ClusterTestBase):
         super().setUp()
 
         # 获取 Kubernetes 集群
-        k8s_cluster = get_kubernetes_cluster()
+        k8s_cluster = ensure_kubernetes_cluster()
 
         if k8s_cluster is None:
             self.skipTest("No Kubernetes cluster available for testing")

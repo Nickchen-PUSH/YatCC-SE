@@ -259,6 +259,9 @@ class TABLE:
             await CODESPACE.allocate(sid=stu.sid)
         except Exception as e:
             LOGGERR.error(f"Failed to allocate resources for student {stu.sid}: {e}")
+            os.rmdir(stu_path + "code/")
+            os.rmdir(stu_path + "io/")
+            os.rmdir(stu_path + "root/")
             raise Error(f"Failed to allocate resources for student {stu.sid}")
 
         stu.codespace.status = CodespaceStatus.STOPPED
@@ -504,6 +507,7 @@ class CODESPACE:
                 student.codespace.status = status
                 await TABLE.write(student)
                 LOGGERR.info(f"获取代码空间状态成功: {sid}, 状态: {status}")
+                return status
 
                 # 确保函数返回最新状态
                 return status
@@ -646,7 +650,7 @@ class CODESPACE:
             name=f"codespace-{sid}",
             image=CONFIG.CLUSTER.Codespace.IMAGE,
             ports=[
-                cluster.PortParams(**port) for port in CONFIG.CLUSTER.Codespace.PORT
+                cluster.PortParams.from_config(port) for port in CONFIG.CLUSTER.Codespace.PORT
             ],
             env={
                 "PASSWORD": api_key_enc(sid),

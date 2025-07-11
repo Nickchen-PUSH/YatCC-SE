@@ -23,7 +23,6 @@ for ext in \
   "daohong-emilio.yash" \
   "mike-lischke.vscode-antlr4" \
   "twxs.cmake" \
-  "RooVeterinaryInc.roo-cline" \
   "/tmp/cpptools-linux-x64.vsix"
 do
   code-server \

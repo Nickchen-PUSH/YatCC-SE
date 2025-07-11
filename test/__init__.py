@@ -38,6 +38,7 @@ CLUSTER: cluster.ClusterABC
 REDIS_SOCK = str(TESTING_DIR / "redis.sock")
 REDIS_INIT = {"unix_socket_path": REDIS_SOCK}
 
+
 @guard_once
 def setup_test(test_name: str):
     """设置测试环境"""
@@ -50,6 +51,7 @@ def setup_test(test_name: str):
         rmtree(TESTING_DIR, ignore_errors=True)
         TESTING_DIR.mkdir(exist_ok=True)
     setup_logger(TESTING_DIR / "log", test_name, level=1)
+
 
 @guard_once
 async def ainit_redis_server():
@@ -106,6 +108,7 @@ appendonly no
             pass
     else:
         assert False, "启动测试用 redis-server 超时"
+
 
 @guard_once
 async def ainit_cluster() -> cluster.ClusterABC:

@@ -112,7 +112,6 @@ async def start() -> None:
             LOGGER,
             code_server_path,
             "/code",
-            "--cert",
             *["--bind-addr", "0.0.0.0:443"],
             *(["--auth", "password"] if STUDENT_API_KEY else ["--auth", "none"]),
             "--disable-update-check",
@@ -144,12 +143,12 @@ async def stop():
             PROGRESS(f"Code Server 异常退出，退出码 {code_res}", logger=LOGGER)
 
     ######
-    # global SSH_SERVER
-    # if SSH_SERVER is not None:
-    #     with PROGRESS["停止 SSH 服务", LOGGER]:
-    #         ssh_ok, ssh_res = await entry.stop_subp(SSH_SERVER, timeout=1)
-    #         if not ssh_ok or ssh_res != 0:
-    #             PROGRESS(f"SSH 服务异常退出，退出码 {ssh_res}", logger=LOGGER)
+    global SSH_SERVER
+    if SSH_SERVER is not None:
+        with PROGRESS["停止 SSH 服务", LOGGER]:
+            ssh_ok, ssh_res = await entry.stop_subp(SSH_SERVER, timeout=1)
+            if not ssh_ok or ssh_res != 0:
+                PROGRESS(f"SSH 服务异常退出，退出码 {ssh_res}", logger=LOGGER)
 
 
 async def run():

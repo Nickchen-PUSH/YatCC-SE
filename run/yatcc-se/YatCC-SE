@@ -1,0 +1,47 @@
+#!/app/venv/bin/python3
+"""YatCC-SE 中控核心"""
+
+import sys
+from argparse import ArgumentParser
+
+
+argp = ArgumentParser(description=__doc__)
+argp.add_argument("--sleep", action="store_true", help="sleep infinity")
+argp.add_argument("--log-level", type=int)
+argp.add_argument("--svc-adm-workers", type=int)
+argp.add_argument("--svc-stu-workers", type=int)
+
+ARGS = argp.parse_args()
+ARG_SLEEP: bool = ARGS.sleep
+ARG_LOG_LEVEL: int | None = ARGS.log_level
+ARG_SVC_ADM_WORKERS: int | None = ARGS.svc_adm_workers
+ARG_SVC_STU_WORKERS: int | None = ARGS.svc_stu_workers
+
+
+# ==================================================================================== #
+
+sys.path.insert(0, "/app")
+import base
+import base.entry
+import base.logger
+import entry
+from config import CONFIG
+
+if ARG_SVC_ADM_WORKERS:
+    CONFIG.ENTRY.svc_adm_workers = ARG_SVC_ADM_WORKERS
+if ARG_SVC_STU_WORKERS:
+    CONFIG.ENTRY.svc_stu_workers = ARG_SVC_STU_WORKERS
+log_level = ARG_LOG_LEVEL if ARG_LOG_LEVEL is not None else base.logger.INFO
+
+
+async def nop():
+    pass
+
+
+if ARG_SLEEP:
+    co = base.entry.main(nop, nop, "YatCC-SE", CONFIG.log_dir, log_level=log_level)
+else:
+    co = base.entry.main(
+        entry.start, entry.stop, "YatCC-SE", CONFIG.log_dir, log_level=log_level
+    )
+exit(base.RUNNER.run(co))
