@@ -97,8 +97,10 @@ spec:
     spec:
       containers:
       - name: yatcc-app
-        image: allenge007/yatcc-se:latest
+        image: yatcc-se:latest
+        imagePullPolicy: IfNotPresent
         ports:
+        - containerPort: 22   # SSH
         - containerPort: 5001 # Admin
         - containerPort: 5002 # Student
         volumeMounts:
@@ -134,6 +136,10 @@ spec:
   selector:
     app: yatcc-app # 匹配我们 Deployment 中的 Pod
   ports:
+  - name: ssh
+    protocol: TCP
+    port: 22
+    targetPort: 22
   - name: admin
     protocol: TCP
     port: 5001

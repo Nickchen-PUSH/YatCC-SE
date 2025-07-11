@@ -16,7 +16,7 @@ class Config(Configuration):
     app_dir = "/app/"
     io_dir = "/io/"
     log_dir = "/io/log/"
-    run_dir = "/run/yatcc-se/"
+    run_dir = "/io/run/"
     log_level = 1
 
     api_key_secret = (

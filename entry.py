@@ -22,8 +22,6 @@ async def start() -> None:
 
     ######
     os.makedirs(CONFIG.run_dir, exist_ok=True)
-    # 确保运行时目录存在，Redis 和 SSHD 都需要这个目录
-    # 运行时目录用于存放 PID 文件和 Unix 套接字等
     os.makedirs(CONFIG.log_dir, exist_ok=True)
     CONFIG.markdown(CONFIG.log_dir + "config.md")
 
@@ -34,7 +32,7 @@ async def start() -> None:
         PROGRESS("SSH 服务已禁用", logger=LOGGER)
     else:
         with PROGRESS["启动 SSH 服务", LOGGER]:
-            sshd_run_dir = CONFIG.io_dir + "run/sshd"
+            sshd_run_dir = "/run/sshd"
             os.makedirs(sshd_run_dir, exist_ok=True)
             # sshd 需要这个目录来权限分离
 
@@ -78,6 +76,7 @@ async def start() -> None:
             else:
                 raise TimeoutError(PROGRESS("Redis 服务启动超时", logger=LOGGER))
             PROGRESS("Redis 服务已就绪", logger=LOGGER)
+
     # integrity_check = False
     # if CONFIG.ENTRY.startup_integrity_check is None:
     #     if not await core.INTEGRITY.get():
@@ -136,7 +135,7 @@ async def start() -> None:
         PROGRESS(f"PID: {SVC_ADM.pid}, {SVC_STU.pid}")
 
     ######
-    aio.create_task(run(), name="watcher")
+    # aio.create_task(run(), name="watcher")
 
 
 async def stop():
@@ -210,14 +209,14 @@ def mk_redis_config() -> str:
                 f"""
                 # 禁用网络端口，使用 Unix 套接字
                 port 0
-                unixsocket {CONFIG.io_dir}run/redis.sock
+                unixsocket {CONFIG.run_dir}redis.sock
                 unixsocketperm 755
                 bind 127.0.0.1 -::1
                 tcp-backlog 511
                 timeout 0
                 tcp-keepalive 300
                 daemonize no
-                pidfile {CONFIG.io_dir}run/redis.pid
+                pidfile {CONFIG.run_dir}redis.pid
                 loglevel notice
                 logfile "{CONFIG.log_dir + "redis.log"}"
                 """
@@ -261,7 +260,7 @@ def mk_sshd_config() -> str:
                 ListenAddress ::
                 PermitRootLogin yes
                 LogLevel INFO
-                AuthorizedKeysFile "{CONFIG.io_dir}/authorized_keys"
+                AuthorizedKeysFile "{CONFIG.io_dir}authorized_keys"
                 PasswordAuthentication no
                 """
                 """
