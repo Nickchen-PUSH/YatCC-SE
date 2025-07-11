@@ -94,7 +94,7 @@ async def build():
         await util.rm_rf(RUNNING_DIR / "yatcc-se")
         await util.cp_rf(RUNNING_DIR / "yatcc-se", PROJECT_DIR / "run/yatcc-se")
 
-        tag = "yatcc:se.latest"
+        tag = "yatcc-se:latest"
         await util.docker_build(
             tag, RUNNING_DIR, RUNNING_DIR / "yatcc-se/Containerfile"
         )
