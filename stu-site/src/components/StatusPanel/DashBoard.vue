@@ -28,7 +28,7 @@ const colors = [
   <div class="flex justify-center items-center gap-4 flex-col">
 
     <el-progress type="dashboard" :percentage="time_percentage"
-    class="flex justify-center items-center" :color="colors" width=240>
+    class="flex justify-center items-center" :color="colors" width=240 stroke-width="20">
       <template #default>
         <div class="text-4xl">剩余时间</div>
         <div class="text-xl">
