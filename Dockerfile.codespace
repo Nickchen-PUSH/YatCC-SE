@@ -18,8 +18,8 @@ RUN apt-get install -y \
     gcc gdb
 RUN apt-get install -y qemu-system-common qemu-system-misc
 RUN apt-get install -y qemu-system
-# ARM
-RUN apt-get install -y libc6-dev-i386-cross
+# AMD64
+RUN apt-get install -y libc6-dev-i386
 COPY run/codespace/CODESPACE /CODESPACE
 COPY codespace/ /app
 WORKDIR /app
