@@ -98,7 +98,7 @@ async def _create() -> int:
             user_info=student.UserInfo(name=name, mail=mail),
             **{},
         )
-        stu.pwd_hash = pwd
+        stu.reset_password(pwd)
         if await student.TABLE.create(stu):
             PROGRESS(f"成功创建 {stu.sid!r}:{stu.user_info.name!r}")
         else:
@@ -141,7 +141,7 @@ async def _delete() -> int:
 
     for sid in PROGRESS @ ARG_SID:
         try:
-            if await student.TABLE.delete(sid, force=ARG_FORCE):
+            if await student.TABLE.delete(sid):
                 PROGRESS(f"成功删除 {sid}")
             else:
                 PROGRESS(f"不存在 {sid}")
