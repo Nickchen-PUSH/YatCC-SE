@@ -50,7 +50,7 @@ CONFIG.CORE = Core
 
 class SvcStu(Configuration):
 
-    static_dir = "/app/stu-site/dist"
+    static_dir = "/app/stu-site"
 
 
 CONFIG.SVC_STU = SvcStu
@@ -58,7 +58,7 @@ CONFIG.SVC_STU = SvcStu
 
 class SvcAdm(Configuration):
 
-    static_dir = "/app/adm-site/dist"
+    static_dir = "/app/adm-site"
 
 
 CONFIG.SVC_ADM = SvcAdm
