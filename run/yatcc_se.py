@@ -86,7 +86,7 @@ async def build():
             PROGRESS(f"==> {path}")
 
         await aio.gather(
-            # build_site(PROJECT_DIR / "adm-site"),
+            build_site(PROJECT_DIR / "adm-site"),
             build_site(PROJECT_DIR / "stu-site"),
         )
 
@@ -99,7 +99,7 @@ async def build():
             tag, RUNNING_DIR, RUNNING_DIR / "yatcc-se/Containerfile"
         )
 
-    # PROGRESS(f"==> {tag}")
+    PROGRESS(f"==> {tag}")
 def run(
     sshd_port: int, svc_adm_port: int, svc_stu_port: int, io_dir: Path_t, *args: str
 ) -> int:
