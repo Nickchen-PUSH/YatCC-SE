@@ -1,7 +1,7 @@
 #!/bin/bash
 
 apt update
-apt install -y python3 python3-pip python3-venv redis podman buildah skopeo wget
+apt install -y python3 python3-pip python3-venv redis podman buildah skopeo wget openssh-server
 
 python3 -m venv venv
 . venv/bin/activate

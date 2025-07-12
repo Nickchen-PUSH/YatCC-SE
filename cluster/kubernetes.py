@@ -9,7 +9,9 @@ from typing import Any, List, Dict
 from kubernetes.client.rest import ApiException
 from dataclasses import dataclass
 
-from config import CONFIG
+
+from config import CONFIG, ENVIRON
+
 from . import (
     ClusterABC,
     JobParams,
@@ -72,6 +74,7 @@ class KubernetesSpec:
                     "protocol": "TCP"
                 }],
                 "type": "LoadBalancer",  # 关键修改：使用 LoadBalancer 类型以获取公网 IP
+
             },
         }
 
@@ -99,7 +102,7 @@ class KubernetesSpec:
         return {
             "name": "code-server",
             "image": self.job_params.image,
-            "imagePullPolicy": "IfNotPresent",
+            "imagePullPolicy": "Always",
             "ports": [
                 {"containerPort": item.target_port, "name": item.name}
                 for item in self.job_params.ports
@@ -398,6 +401,7 @@ class KubernetesCluster(ClusterABC):
             # 如果没有分配 IP，说明负载均衡器还在创建中
             LOGGER.info(f"Service {svc_name} is waiting for an external IP from the LoadBalancer.")
             return "pending"
+
 
         except ApiException as e:
             if e.status == 404:

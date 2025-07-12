@@ -1,0 +1,83 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: codespace-deployment
+  labels:
+    app: codespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: codespace
+  template:
+    metadata:
+      labels:
+        app: codespace
+    spec:
+      containers:
+      - name: codespace
+        image: crpi-p0o30thhhjjucg78.cn-guangzhou.personal.cr.aliyuncs.com/nickchen-aliyun/codespace:1.0
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 443    # Web 服务端口
+          name: http
+          protocol: TCP
+        - containerPort: 5900    # VNC 端口
+          name: vnc
+          protocol: TCP
+        - containerPort: 22      # SSH 端口
+          name: ssh
+          protocol: TCP
+        env:
+        - name: ENV
+          value: "production"
+        volumeMounts:
+        - name: code-workspace
+          mountPath: /code
+        - name: io
+          mountPath: /io
+        - name: root
+          mountPath: /root
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+      volumes:
+      - name: code-workspace
+        hostPath:
+          path: /data/code
+          type: DirectoryOrCreate
+      - name: io
+        hostPath:
+          path: /data/io
+          type: DirectoryOrCreate
+      - name: root
+        hostPath:
+          path: /data/root
+          type: DirectoryOrCreate
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: codespace-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: codespace
+  ports:
+    - name: http
+      protocol: TCP
+      port: 6443           # Service 端口
+      targetPort: 443     # 对应容器的 containerPort
+    - name: vnc
+      protocol: TCP
+      port: 5900
+      targetPort: 5900
+    - name: ssh
+      protocol: TCP
+      port: 2222
+      targetPort: 22
+  type: NodePort

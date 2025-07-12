@@ -81,24 +81,26 @@ roleRef:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: yatcc-app-deployment
+  name: yatcc-se-app
   namespace: default
   labels:
-    app: yatcc-app
+    app: yatcc-se
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: yatcc-app
+      app: yatcc-se
   template:
     metadata:
       labels:
-        app: yatcc-app
+        app: yatcc-se
     spec:
       containers:
-      - name: yatcc-app
-        image: allenge007/yatcc-se:latest
+      - name: yatcc-se
+        image: crpi-p0o30thhhjjucg78-vpc.cn-guangzhou.personal.cr.aliyuncs.com/nickchen-aliyun/yatcc-se.ci:latest
+        imagePullPolicy: Always
         ports:
+        - containerPort: 22   # SSH
         - containerPort: 5001 # Admin
         - containerPort: 5002 # Student
         volumeMounts:
@@ -111,6 +113,8 @@ spec:
           value: "kubernetes"
         - name: MOCK_CLUSTER
           value: "False"
+        - name: DEPLOYMENT_MODE
+          value: "aliyun"
         # - name: CORE_STUDENTS_DIR
         #   value: "/data/io/students/"
         # - name: CORE_ARCHIVE_STUDENTS_DIR
@@ -127,13 +131,17 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: yatcc-app-service
+  name: yatcc-se-service
   namespace: default
 spec:
   type: LoadBalancer # 使用 LoadBalancer 让云服务商提供公网 IP，或改为 NodePort
   selector:
-    app: yatcc-app # 匹配我们 Deployment 中的 Pod
+    app: yatcc-se # 匹配我们 Deployment 中的 Pod
   ports:
+  - name: ssh
+    protocol: TCP
+    port: 22
+    targetPort: 22
   - name: admin
     protocol: TCP
     port: 5001
