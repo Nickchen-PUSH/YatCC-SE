@@ -51,9 +51,8 @@ class KubernetesSpec:
         # 确保至少有一个端口信息
         if not self.job_params.ports:
             raise ValueError("JobParams must contain at least one port definition.")
-        
+
         # 找到 http 端口，或者使用第一个端口作为默认
-        http_port_info = next((p for p in self.job_params.ports if p.name == "http"), self.job_params.ports[0])
 
         return {
             "apiVersion": "v1",
@@ -65,12 +64,14 @@ class KubernetesSpec:
             },
             "spec": {
                 "selector": {"app": self.job_params.name, **self._build_labels()},
-                "ports": [{
-                    "name": "http",
-                    "port": 80,  # 负载均衡器监听 80 端口 (标准HTTP)
-                    "targetPort": http_port_info.target_port,  # 流量转发到容器的目标端口
-                    "protocol": "TCP"
-                }],
+                "ports": [
+                    {
+                        "name": port.name,
+                        "port": port.port,  # 负载均衡器监听 80 端口 (标准HTTP)
+                        "targetPort": port.target_port,  # 流量转发到容器的目标端口
+                    }
+                    for port in self.job_params.ports
+                ],
                 "type": "LoadBalancer",  # 关键修改：使用 LoadBalancer 类型以获取公网 IP
             },
         }
@@ -290,15 +291,17 @@ class KubernetesCluster(ClusterABC):
                 )
 
                 made_changes = False
-                
+
                 # 检查并恢复副本数
                 annotations = deployment.metadata.annotations or {}
                 if annotations.get("yatcc-se/suspended") == "true":
                     LOGGER.info(f"Resuming suspended Deployment '{job_name}'...")
                     replicas_str = annotations.get("yatcc-se/original-replicas", "1")
                     deployment.spec.replicas = int(replicas_str)
-                    if "yatcc-se/suspended" in annotations: del annotations["yatcc-se/suspended"]
-                    if "yatcc-se/original-replicas" in annotations: del annotations["yatcc-se/original-replicas"]
+                    if "yatcc-se/suspended" in annotations:
+                        del annotations["yatcc-se/suspended"]
+                    if "yatcc-se/original-replicas" in annotations:
+                        del annotations["yatcc-se/original-replicas"]
                     deployment.metadata.annotations = annotations
                     made_changes = True
 
@@ -306,8 +309,10 @@ class KubernetesCluster(ClusterABC):
                 container = deployment.spec.template.spec.containers[0]
                 new_env = [{"name": k, "value": v} for k, v in job_params.env.items()]
                 new_limits = {
-                    "memory": job_params.memory_limit or CONFIG.CLUSTER.Codespace.DEFAULT_MEMORY_LIMIT,
-                    "cpu": job_params.cpu_limit or CONFIG.CLUSTER.Codespace.DEFAULT_CPU_LIMIT,
+                    "memory": job_params.memory_limit
+                    or CONFIG.CLUSTER.Codespace.DEFAULT_MEMORY_LIMIT,
+                    "cpu": job_params.cpu_limit
+                    or CONFIG.CLUSTER.Codespace.DEFAULT_CPU_LIMIT,
                 }
                 if container.env != new_env or container.resources.limits != new_limits:
                     container.env = new_env
@@ -324,7 +329,9 @@ class KubernetesCluster(ClusterABC):
                         body=deployment,
                     )
                 else:
-                    LOGGER.info(f"Deployment '{job_name}' is already up-to-date and running.")
+                    LOGGER.info(
+                        f"Deployment '{job_name}' is already up-to-date and running."
+                    )
 
                 service = await self._check_service(job_params)
                 return await self._build_job_info(deployment, service)
@@ -334,9 +341,13 @@ class KubernetesCluster(ClusterABC):
                     LOGGER.warning(f"Conflict detected for '{job_name}'. Retrying...")
                     await aio.sleep(1)
                     continue
-                raise ClusterError(f"Failed to resume/update deployment '{job_name}': {e}")
-        
-        raise ClusterError(f"Failed to resume/update deployment '{job_name}' after retries.")
+                raise ClusterError(
+                    f"Failed to resume/update deployment '{job_name}': {e}"
+                )
+
+        raise ClusterError(
+            f"Failed to resume/update deployment '{job_name}' after retries."
+        )
 
     async def _check_service(self, job_params: JobParams):
         """确保 Service 存在，如果不存在则创建它，返回 Service 对象"""
@@ -378,7 +389,7 @@ class KubernetesCluster(ClusterABC):
         await self.ensure_initialized()
         svc_name = f"{job_name}-svc"
         namespace = CONFIG.CLUSTER.Kubernetes.NAMESPACE
-        
+
         try:
             service = await aio.to_thread(
                 self.core_v1.read_namespaced_service,
@@ -393,10 +404,12 @@ class KubernetesCluster(ClusterABC):
                 external_ip = ingress_info.ip or ingress_info.hostname
                 if external_ip:
                     # Service 的 port 被设置为 80，所以 URL 中不需要再指定端口号
-                    return f"http://{external_ip}:{ex}"
+                    return f"http://{external_ip}"
 
             # 如果没有分配 IP，说明负载均衡器还在创建中
-            LOGGER.info(f"Service {svc_name} is waiting for an external IP from the LoadBalancer.")
+            LOGGER.info(
+                f"Service {svc_name} is waiting for an external IP from the LoadBalancer."
+            )
             return "pending"
 
         except ApiException as e:
@@ -418,7 +431,10 @@ class KubernetesCluster(ClusterABC):
             if not deployment:
                 raise JobNotFoundError(f"Job not found: {job_name}")
             # 检查 Deployment 的状态
-            if deployment.status.ready_replicas and deployment.status.ready_replicas >= 1:
+            if (
+                deployment.status.ready_replicas
+                and deployment.status.ready_replicas >= 1
+            ):
                 return JobInfo.Status.RUNNING
             elif deployment.status.unavailable_replicas:
                 return JobInfo.Status.FAILED
@@ -449,7 +465,9 @@ class KubernetesCluster(ClusterABC):
             return await self._build_job_info(deployment, service)
         except ApiException as e:
             if e.status == 404:
-                raise JobNotFoundError(f"Job or associated service not found: {job_name}")
+                raise JobNotFoundError(
+                    f"Job or associated service not found: {job_name}"
+                )
             raise ClusterError(f"Failed to get job info: {e}")
 
     async def delete_job(self, job_name: str) -> None:
@@ -473,7 +491,9 @@ class KubernetesCluster(ClusterABC):
                 # 记录原始副本数并设置暂停注解
                 annotations = deployment.metadata.annotations or {}
                 annotations["yatcc-se/suspended"] = "true"
-                annotations["yatcc-se/original-replicas"] = str(deployment.spec.replicas or 1)
+                annotations["yatcc-se/original-replicas"] = str(
+                    deployment.spec.replicas or 1
+                )
                 deployment.metadata.annotations = annotations
                 deployment.spec.replicas = 0
 
@@ -488,20 +508,29 @@ class KubernetesCluster(ClusterABC):
 
             except ApiException as e:
                 if e.status == 409 and attempt < max_retries - 1:
-                    LOGGER.warning(f"Conflict detected while suspending '{job_name}'. Retrying...")
+                    LOGGER.warning(
+                        f"Conflict detected while suspending '{job_name}'. Retrying..."
+                    )
                     await aio.sleep(1)
                     continue
                 elif e.status == 404:
-                    raise JobNotFoundError(f"Cannot suspend: Deployment '{job_name}' not found.")
+                    raise JobNotFoundError(
+                        f"Cannot suspend: Deployment '{job_name}' not found."
+                    )
                 else:
-                    raise ClusterError(f"Failed to suspend deployment '{job_name}': {e}")
-        
+                    raise ClusterError(
+                        f"Failed to suspend deployment '{job_name}': {e}"
+                    )
+
         raise ClusterError(f"Failed to suspend deployment '{job_name}' after retries.")
 
     async def _build_job_info(self, deployment, service) -> JobInfo:
         """从 Deployment 和 Service 对象构建 JobInfo"""
         annotations = deployment.metadata.annotations or {}
-        if annotations.get("yatcc-se/suspended") == "true" or deployment.spec.replicas == 0:
+        if (
+            annotations.get("yatcc-se/suspended") == "true"
+            or deployment.spec.replicas == 0
+        ):
             status = JobInfo.Status.SUSPENDED
         elif deployment.status.ready_replicas and deployment.status.ready_replicas >= 1:
             status = JobInfo.Status.RUNNING
@@ -511,7 +540,11 @@ class KubernetesCluster(ClusterABC):
             status = JobInfo.Status.PENDING
 
         service_url = "pending"
-        if service and service.status.load_balancer and service.status.load_balancer.ingress:
+        if (
+            service
+            and service.status.load_balancer
+            and service.status.load_balancer.ingress
+        ):
             ingress_info = service.status.load_balancer.ingress[0]
             external_ip = ingress_info.ip or ingress_info.hostname
             if external_ip:

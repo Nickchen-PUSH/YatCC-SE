@@ -103,7 +103,7 @@ class ClusterConfig(Configuration):
         DEFAULT_STORAGE_SIZE = "5Gi"
         PORT = [
             {
-                "port": 443,
+                "port": 80,
                 "targetPort": 443,
                 "name": "http",
             },
