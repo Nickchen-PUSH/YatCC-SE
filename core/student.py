@@ -549,7 +549,7 @@ class CODESPACE:
                 # 代码空间正在运行，返回URL
 
                 # 检查是否有存储的URL
-                if student.codespace.url:
+                if student.codespace.url.startswith("http://") or student.codespace.url.startswith("https://"):
                     return student.codespace.url
 
                 # 如果没有存储的URL，可能是集群状态不一致，尝试从集群获取
