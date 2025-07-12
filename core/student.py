@@ -224,7 +224,8 @@ class TABLE:
         """获取所有学生ID"""
         from core import DB_STU
 
-        return await DB_STU.keys()
+        keys = await DB_STU.keys()
+        return [key.decode("utf-8") for key in keys]
 
     @classmethod
     async def create(cls, stu: Student) -> bool:
@@ -678,16 +679,14 @@ class CODESPACE:
             now = datetime.now().timestamp()
             
             # 检查是否超出时间配额
-            if student.codespace.time_quota > 0:
-                if student.codespace.last_watch == 0:
-                    student.codespace.last_watch = student.codespace.last_active
-                current_usage = now - student.codespace.last_watch
-                student.codespace.last_watch = now
-                student.codespace.time_used += current_usage
-                await TABLE.write(student)
-                if student.codespace.time_used >= student.codespace.time_quota:
-                    LOGGERR.info(f"学生 {sid} 代码空间因超出配额将被停止。")
-                    await cls.stop(sid)
+            if student.codespace.last_watch == 0:
+                student.codespace.last_watch = student.codespace.last_active
+            current_usage = now - student.codespace.last_start + student.codespace.time_used
+            student.codespace.last_watch = now
+            await TABLE.write(student)
+            if current_usage >= student.codespace.time_quota:
+                LOGGERR.info(f"学生 {sid} 代码空间因超出配额将被停止。")
+                await cls.stop(sid)
 
         except StudentNotFoundError:
             LOGGERR.warning(f"监控期间找不到学生 {sid}，跳过。")
@@ -698,6 +697,7 @@ class CODESPACE:
     @classmethod
     async def watch_all(cls) -> None:
         """监控所有学生的代码空间"""
+        LOGGERR.info("开始监控所有学生代码空间活动状态")
         sids = await TABLE.all_ids()
         tasks = [cls.watch(sid) for sid in sids]
         await asyncio.gather(*tasks)

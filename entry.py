@@ -135,7 +135,7 @@ async def start() -> None:
         PROGRESS(f"PID: {SVC_ADM.pid}, {SVC_STU.pid}")
 
     ######
-    # aio.create_task(run(), name="watcher")
+    aio.create_task(run(), name="watcher")
 
 
 async def stop():
