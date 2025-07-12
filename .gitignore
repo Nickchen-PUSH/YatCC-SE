@@ -9,6 +9,7 @@ venv*/
 testing/
 running/
 .pytest_cache/
+tmp/
 
 # vscode
 .vscode/

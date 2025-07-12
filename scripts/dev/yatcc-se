@@ -30,7 +30,7 @@ if ARG_SUBCMD is None:
 import os
 import sys
 
-sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.."))
+sys.path.insert(0, os.path.realpath(os.path.dirname(__file__) + "/.." * 2))
 
 import base
 from run import __run__
@@ -90,6 +90,7 @@ else:
             {
                 "build": _build,
                 "upload": _upload,
+                "run": _run,
             }[ARG_SUBCMD]()
         )
     )

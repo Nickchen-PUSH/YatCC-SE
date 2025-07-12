@@ -5,8 +5,10 @@ from base import Configuration
 
 
 class Environ(Configuration):
-    is_k8s = "KUBERNETES_SERVICE_HOST" in os.environ
-    mock_cluster = not is_k8s
+    mock_cluster = False
+
+    deployment_mode = "local"
+    """部署模式，可选值为 local, minikube, aliyun"""
 
 
 ENVIRON = Environ()
@@ -16,7 +18,7 @@ class Config(Configuration):
     app_dir = "/app/"
     io_dir = "/io/"
     log_dir = "/io/log/"
-    run_dir = "/run/yatcc-se/"
+    run_dir = "/io/run/"
     log_level = 1
 
     api_key_secret = (
@@ -77,7 +79,9 @@ class Entry(Configuration):
 
     default_watching_students_interval = 60 * 15
 
+
 CONFIG.ENTRY = Entry
+
 
 class ClusterConfig(Configuration):
     """集群配置"""
@@ -92,7 +96,7 @@ class ClusterConfig(Configuration):
     class Codespace(Configuration):
         """codespace 配置"""
 
-        IMAGE = "nickchencoffee/codespace:aarch64"
+        IMAGE = "crpi-p0o30thhhjjucg78-vpc.cn-guangzhou.personal.cr.aliyuncs.com/nickchen-aliyun/codespace.ci:latest"
         DEFAULT_PASSWORD = "student123"
         DEFAULT_CPU_LIMIT = "1000m"
         DEFAULT_MEMORY_LIMIT = "2Gi"

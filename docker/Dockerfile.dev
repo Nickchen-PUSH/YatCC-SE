@@ -1,7 +1,12 @@
+# YatCC-SE 开发环境 Dockerfile
+# 兼容现有的 docker-compose.yml 配置
+
 FROM ubuntu:24.04
 
-# 避免交互式安装过程中的提示
+# 设置环境变量
 ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
 # 设置工作目录
 WORKDIR /workspace
@@ -17,62 +22,62 @@ RUN apt-get update && apt-get install -y \
     tree \
     htop \
     unzip \
+    zip \
+    jq \
     # Python 开发环境
     python3 \
     python3-pip \
     python3-venv \
     python3-dev \
-    # 容器和构建工具
-    redis \
-    # 编译工具
+    python3-setuptools \
+    # Node.js 和 npm (用于前端开发)
+    nodejs \
+    npm \
+    # Redis 服务器
+    redis-server \
+    # SSH 服务器 (用于远程连接)
+    openssh-server \
+    # 构建工具
+    build-essential \
     make \
     gcc \
     g++ \
     # 网络工具
     net-tools \
     iputils-ping \
+    telnet \
     # 系统工具
     sudo \
     ca-certificates \
     gnupg \
     lsb-release \
-    # code-server 依赖
-    dumb-init \
-    # minikube 依赖
-    conntrack \
-    socat \
+    software-properties-common \
+    # Git 和版本控制
+    git-core \
+    # 进程管理
+    supervisor \
     && rm -rf /var/lib/apt/lists/*
 
-# 安装 Docker
+# 安装 Docker (用于容器内开发)
 RUN curl -fsSL https://get.docker.com -o get-docker.sh \
     && sh get-docker.sh \
-    && rm get-docker.sh
+    && rm get-docker.sh \
+    && usermod -aG docker root
 
-# 安装 kubectl
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/arm64/kubectl" \
-    && install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
-    && rm kubectl
+# 创建开发用户 (与现有配置兼容)
+RUN useradd -m -s /bin/bash -G sudo,docker developer \
+    && echo 'developer:developer' | chpasswd \
+    && echo 'developer ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
-# 安装 minikube
-RUN curl -LO https://storage.googleapis.com/minikube/releases/latest/minikube-linux-arm64 \
-    && install minikube-linux-arm64 /usr/local/bin/minikube \
-    && rm minikube-linux-arm64
+# 创建 minikube 目录
+RUN mkdir -p /home/developer/.minikube \
+    && chown -R developer:developer /home/developer
 
-# 安装 helm (可选)
-RUN curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+# 安装 Python 包管理工具
+RUN pip3 install --upgrade pip setuptools wheel
 
-# 安装 code-server
-RUN curl -fsSL https://code-server.dev/install.sh | sh
-
-# 创建 Python 虚拟环境
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# 升级 pip 并安装 Python 依赖
-RUN pip install --upgrade pip setuptools wheel
-
-# 安装项目依赖
-RUN pip install \
+# 安装项目 Python 依赖
+RUN pip3 install \
     # Web 框架
     'flask[async]' \
     gunicorn \
@@ -82,55 +87,91 @@ RUN pip install \
     cryptography \
     # HTTP 客户端
     httpx \
-    # 负载测试
-    locust \
+    requests \
     # API 文档
-    'flask-openapi3[swagger, redoc, rapidoc, rapipdf, scalar, elements]' \
-    # 测试工具
-    coverage \
+    'flask-openapi3[swagger, rapipdf, rapidoc]' \
+    # Kubernetes 客户端
+    kubernetes \
+    # 开发工具
     pytest \
     pytest-asyncio \
     pytest-cov \
-    # Kubernetes 客户端
-    kubernetes \
-    # 数据验证
-    pydantic \
-    # 开发工具
     black \
-    isort \
     flake8 \
     mypy \
-    # 其他工具
-    python-dotenv
+    # 调试工具
+    ipdb \
+    pdb++ \
+    # 监控工具
+    psutil \
+    # 日志工具
+    loguru
 
-# 创建非 root 用户
-RUN useradd -m -s /bin/bash developer \
-    && usermod -aG docker developer \
-    && echo "developer ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers
+# 配置 Redis
+RUN mkdir -p /var/log/redis /var/lib/redis \
+    && chown redis:redis /var/log/redis /var/lib/redis
 
-# 设置 Git 安全目录
-RUN git config --global --add safe.directory /workspace
+# 配置 SSH
+RUN mkdir /var/run/sshd \
+    && echo 'root:root' | chpasswd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
-# 创建 code-server 配置目录
-RUN mkdir -p /home/developer/.config/code-server
+# 安装 code-server (VS Code in browser)
+RUN curl -fsSL https://code-server.dev/install.sh | sh
 
-# 创建 minikube 和 kubernetes 配置目录
-RUN mkdir -p /home/developer/.kube \
-    && mkdir -p /home/developer/.minikube \
-    && chown -R developer:developer /home/developer/.kube \
-    && chown -R developer:developer /home/developer/.minikube
+# 创建 Supervisor 配置目录
+RUN mkdir -p /etc/supervisor/conf.d
+
+# 配置 Supervisor
+COPY docker/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# 复制项目文件 (注释掉，因为通过 volume 挂载)
+# COPY . /workspace/
+# RUN chown -R developer:developer /workspace
 
 # 切换到开发用户
 USER developer
+WORKDIR /workspace
 
-# 设置环境变量
-ENV PYTHONPATH="/workspace:$PYTHONPATH"
-ENV PATH="/opt/venv/bin:$PATH"
-ENV KUBECONFIG="/home/developer/.kube/config"
-ENV MINIKUBE_HOME="/home/developer/.minikube"
+# 安装前端依赖 (运行时安装，因为代码通过 volume 挂载)
+# RUN if [ -f "stu-site/package.json" ]; then \
+#         cd stu-site && \
+#         npm install && \
+#         cd ..; \
+#     fi
 
-# 暴露端口
-EXPOSE 5000 8080 8443 6379 8000 6443
+# 创建开发环境配置模板
+RUN echo '#!/bin/bash\n\
+# 检查并安装前端依赖\n\
+if [ -f "/workspace/stu-site/package.json" ] && [ ! -d "/workspace/stu-site/node_modules" ]; then\n\
+    echo "安装前端依赖..."\n\
+    cd /workspace/stu-site && npm install\n\
+fi\n\
+\n\
+# 创建开发配置文件（如果不存在）\n\
+if [ ! -f "/workspace/config.py" ]; then\n\
+    echo "创建开发配置文件..."\n\
+    cat > /workspace/config.py << EOF\n\
+# 开发环境配置\n\
+DEBUG = True\n\
+REDIS_HOST = "redis"\n\
+REDIS_PORT = 6379\n\
+SECRET_KEY = "dev-secret-key-change-in-production"\n\
+EOF\n\
+fi\n\
+\n\
+exec "$@"' > /entrypoint.sh && chmod +x /entrypoint.sh
 
-# 默认命令
+# 切换回 root 用户启动服务
+USER root
+
+# 暴露端口 (与现有 docker-compose.yml 兼容)
+EXPOSE 22 5000 5001 5002 6379 8080 8443
+
+# 设置数据卷
+VOLUME ["/workspace", "/var/lib/redis", "/home/developer/.minikube"]
+
+# 入口点
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["/bin/bash"]

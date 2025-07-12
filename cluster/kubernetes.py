@@ -9,7 +9,7 @@ from typing import Any, List, Dict
 from kubernetes.client.rest import ApiException
 from dataclasses import dataclass
 
-from config import CONFIG
+from config import CONFIG, ENVIRON
 from . import (
     ClusterABC,
     JobParams,
@@ -99,7 +99,7 @@ class KubernetesSpec:
         return {
             "name": "code-server",
             "image": self.job_params.image,
-            "imagePullPolicy": "IfNotPresent",
+            "imagePullPolicy": "Always",
             "ports": [
                 {"containerPort": item.target_port, "name": item.name}
                 for item in self.job_params.ports

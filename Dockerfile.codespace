@@ -1,0 +1,30 @@
+FROM ubuntu:24.04 AS base
+
+RUN apt-get update
+RUN apt-get install -y python3 openssh-server openssl lsof && \
+    apt-get autoremove -y && \
+    apt-get clean -y
+
+FROM base AS code-server
+RUN wget https://github.com/microsoft/vscode-cpptools/releases/download/v1.23.6/cpptools-linux-x64.vsix -O /tmp/cpptools-linux-x64.vsix
+RUN wget https://github.com/coder/code-server/releases/download/v4.96.4/code-server_4.96.4_amd64.deb -O /tmp/code-server.deb
+COPY run/codespace/setup.sh /tmp/
+RUN bash /tmp/setup.sh
+
+FROM code-server AS app
+RUN apt-get install -y \
+    bison flex libssl-dev \
+    nasm cmake libncurses5-dev \
+    gcc gdb
+RUN apt-get install -y qemu-system-common qemu-system-misc
+RUN apt-get install -y qemu-system
+# AMD64
+RUN apt-get install -y libc6-dev-i386
+COPY run/codespace/CODESPACE /CODESPACE
+RUN mkdir -p /app
+COPY codespace/ /app/codespace/
+COPY base/ /app/base/
+WORKDIR /app
+RUN rm -rf /tmp/*
+
+ENTRYPOINT [ "/bin/python3", "/CODESPACE" ]

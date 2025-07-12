@@ -1,14 +1,15 @@
-import os
-from pathlib import Path
-from types import ModuleType
+"""YatCC-SE 开发基准配置"""
 
-from base import PROJECT_DIR, Configuration, timetag
+from base import PROJECT_DIR, Configuration
 
 # ==================================================================================== #
 
 
 class Environ(Configuration):
     mock_cluster = False
+    
+    deployment_mode = "local"
+    """部署模式，可选值为 local, minikube, aliyun"""
 
     EXECUTABLE: type["Executable"]
     """外部可执行程序"""
@@ -79,6 +80,9 @@ class Core(Configuration):
     archive_students_dir = Config.io_dir + "archive-students/"
     """学生数据的归档目录，必须以 / 结尾"""
 
+    default_admin_api_key = "SE!@2025"
+    """默认的管理员 API-KEY"""
+
 
 CONFIG.CORE = Core
 
@@ -132,7 +136,7 @@ CONFIG.ENTRY = Entry
 class ClusterConfig(Configuration):
     """集群配置"""
 
-    DEFAULT_TYPE = "mock"
+    DEFAULT_TYPE = "kubernetes"
 
     class Kubernetes(Configuration):
         NAMESPACE = "default"
@@ -142,7 +146,7 @@ class ClusterConfig(Configuration):
     class Codespace(Configuration):
         """codespace 配置"""
 
-        IMAGE = "nickchencoffee/codespace:aarch64"
+        IMAGE = "crpi-p0o30thhhjjucg78.cn-guangzhou.personal.cr.aliyuncs.com/nickchen-aliyun/codespace.ci:latest"
         DEFAULT_PASSWORD = "student123"
         DEFAULT_CPU_LIMIT = "1000m"
         DEFAULT_MEMORY_LIMIT = "2Gi"

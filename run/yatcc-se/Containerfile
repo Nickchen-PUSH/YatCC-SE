@@ -12,13 +12,13 @@ RUN . venv/bin/activate && pip install \
     'flask-openapi3[swagger, rapipdf, rapidoc]' kubernetes
 
 FROM venv AS app
-COPY service.tgz stu-site.tgz /tmp/
+COPY service.tgz stu-site.tgz adm-site.tgz /tmp/
 COPY yatcc-se/YatCC-SE /YatCC-SE
 
 WORKDIR /app
 RUN tar -xzf /tmp/service.tgz && \
     mkdir -p adm-site stu-site && \
-    # tar -xzf /tmp/adm-site.tgz -C adm-site && \
+    tar -xzf /tmp/adm-site.tgz -C adm-site && \
     tar -xzf /tmp/stu-site.tgz -C stu-site && \
     rm -rf /tmp/*
 COPY yatcc-se/config.py /app/
