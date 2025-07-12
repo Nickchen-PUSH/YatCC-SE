@@ -148,12 +148,12 @@ class ClusterConfig(Configuration):
 
         IMAGE = "crpi-p0o30thhhjjucg78.cn-guangzhou.personal.cr.aliyuncs.com/nickchen-aliyun/codespace.ci:latest"
         DEFAULT_PASSWORD = "student123"
-        DEFAULT_CPU_LIMIT = "1000m"
-        DEFAULT_MEMORY_LIMIT = "2Gi"
+        DEFAULT_CPU_LIMIT = "2000m"
+        DEFAULT_MEMORY_LIMIT = "4Gi"
         DEFAULT_STORAGE_SIZE = "5Gi"
         PORT = [
             {
-                "port": 443,
+                "port": 80,
                 "targetPort": 443,
                 "name": "http",
             },
