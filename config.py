@@ -6,7 +6,7 @@ from base import PROJECT_DIR, Configuration
 
 
 class Environ(Configuration):
-    mock_cluster = False
+    mock_cluster = True
     
     deployment_mode = "local"
     """部署模式，可选值为 local, minikube, aliyun"""
