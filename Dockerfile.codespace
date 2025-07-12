@@ -11,6 +11,14 @@ RUN wget https://github.com/coder/code-server/releases/download/v4.96.4/code-ser
 COPY run/codespace/setup.sh /tmp/
 RUN bash /tmp/setup.sh
 
+COPY run/codespace/CODESPACE /CODESPACE
+RUN mkdir -p /app
+COPY codespace/ /app/codespace/
+COPY base/ /app/base/
+WORKDIR /app
+RUN rm -rf /tmp/*
+
+
 FROM code-server AS app
 RUN apt-get install -y \
     bison flex libssl-dev \
@@ -21,11 +29,5 @@ RUN apt-get install -y qemu-system
 # AMD64
 RUN apt-get install -y libc6-dev-i386
 RUN apt-get install -y git
-COPY run/codespace/CODESPACE /CODESPACE
-RUN mkdir -p /app
-COPY codespace/ /app/codespace/
-COPY base/ /app/base/
-WORKDIR /app
-RUN rm -rf /tmp/*
 
 ENTRYPOINT [ "/bin/python3", "/CODESPACE" ]
