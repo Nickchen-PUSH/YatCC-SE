@@ -69,7 +69,7 @@ CONFIG.SVC_ADM = SvcAdm
 class Entry(Configuration):
 
     redis_executable = "/usr/bin/redis-server"
-    sshd_executable = "" if ENVIRON.is_k8s else "/usr/sbin/sshd"
+    sshd_executable = "/usr/sbin/sshd"
 
     health_check_interval = 60
     startup_integrity_check: bool | None = None
