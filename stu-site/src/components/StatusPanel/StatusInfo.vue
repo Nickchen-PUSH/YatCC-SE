@@ -49,13 +49,13 @@ const pwdVisible = ref(false)
       密码：
     </label>
     <div class="flex items-center">
-      <el-tooltip :content="pwdVisible ? '点击隐藏' : '点击显示'"
+      <el-tooltip :content="pwdVisible ? '双击隐藏' : '双击显示'"
       placement="bottom" hide-after="100">
-        <span class="text-16px pr-2 cursor-pointer" @click="pwdVisible = !pwdVisible">
+        <span class="text-16px pr-2 cursor-pointer" @dblclick="pwdVisible = !pwdVisible">
           {{pwdVisible ? getToken() : '*********'}}
         </span>
       </el-tooltip>
-      <ClipBoard :text="getToken() as string" />
+      <ClipBoard :text="getToken() as string" @callback="() => pwdVisible = !pwdVisible"/>
     </div>
   </div>
 
