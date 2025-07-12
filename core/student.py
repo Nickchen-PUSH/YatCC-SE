@@ -446,7 +446,7 @@ class CODESPACE:
 
             # 计算本次使用的时间并更新总使用时间
             if student.codespace.last_start > 0:
-                used_time = now - student.codespace.last_start
+                used_time = now - max(student.codespace.last_start, student.codespace.last_watch)
                 student.codespace.time_used += used_time
                 LOGGERR.info(
                     f"代码空间使用时间更新: {sid}, +{used_time}秒, 总计{student.codespace.time_used}秒"
@@ -679,9 +679,7 @@ class CODESPACE:
             
             # 检查是否超出时间配额
             if student.codespace.time_quota > 0:
-                if student.codespace.last_watch == 0:
-                    student.codespace.last_watch = student.codespace.last_active
-                current_usage = now - student.codespace.last_watch
+                current_usage = now - max(student.codespace.last_start, student.codespace.last_watch)
                 student.codespace.last_watch = now
                 student.codespace.time_used += current_usage
                 await TABLE.write(student)
