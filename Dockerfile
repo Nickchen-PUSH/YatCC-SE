@@ -1,4 +1,4 @@
-# YatCC-SE 生产环境 Dockerfile
+# YatCC-SE Dockerfile
 # 优化版本，适用于云容器服务
 # Multi-stage build for smaller image size and better security
 
