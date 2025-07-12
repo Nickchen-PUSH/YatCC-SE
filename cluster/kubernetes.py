@@ -9,7 +9,7 @@ from typing import Any, List, Dict
 from kubernetes.client.rest import ApiException
 from dataclasses import dataclass
 
-from config import CONFIG, Config
+from config import CONFIG
 from . import (
     ClusterABC,
     JobParams,
@@ -67,7 +67,7 @@ class KubernetesSpec:
                 "selector": {"app": self.job_params.name, **self._build_labels()},
                 "ports": [{
                     "name": "http",
-                    "port": http_port_info.port,  # 使用 JobParams 中定义的端口
+                    "port": 80,  # 负载均衡器监听 80 端口 (标准HTTP)
                     "targetPort": http_port_info.target_port,  # 流量转发到容器的目标端口
                     "protocol": "TCP"
                 }],
@@ -392,9 +392,8 @@ class KubernetesCluster(ClusterABC):
                 # 云服务商可能提供 IP 或 hostname
                 external_ip = ingress_info.ip or ingress_info.hostname
                 if external_ip:
-                    port = service.spec.ports[0].port if service.spec.ports else 80
                     # Service 的 port 被设置为 80，所以 URL 中不需要再指定端口号
-                    return f"http://{external_ip}:{port}"
+                    return f"http://{external_ip}:{ex}"
 
             # 如果没有分配 IP，说明负载均衡器还在创建中
             LOGGER.info(f"Service {svc_name} is waiting for an external IP from the LoadBalancer.")
