@@ -16,6 +16,7 @@ RUNNING_DIR: Path
 INDEX_LOGGER: Logger
 """主索引日志器"""
 
+
 def __run__(_spec_, _file_, level=1, time_tree=True) -> Prologue_t:
     global RUNNING_DIR, INDEX_LOGGER
     RUNNING_DIR, INDEX_LOGGER, progress = prologue(
@@ -28,6 +29,7 @@ def __run__(_spec_, _file_, level=1, time_tree=True) -> Prologue_t:
     )
     return RUNNING_DIR, INDEX_LOGGER, progress
 
+
 @guard_once
 async def ainit_cluster() -> cluster.ClusterABC:
     global CLUSTER
@@ -38,6 +40,7 @@ async def ainit_cluster() -> cluster.ClusterABC:
     )
 
     return CLUSTER
+
 
 # ==================================================================================== #
 

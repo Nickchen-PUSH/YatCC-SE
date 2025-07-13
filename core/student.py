@@ -446,7 +446,9 @@ class CODESPACE:
 
             # 计算本次使用的时间并更新总使用时间
             if student.codespace.last_start > 0:
-                used_time = now - student.codespace.last_start
+                used_time = now - max(
+                    student.codespace.last_start, student.codespace.last_watch
+                )
                 student.codespace.time_used += used_time
                 LOGGERR.info(
                     f"代码空间使用时间更新: {sid}, +{used_time}秒, 总计{student.codespace.time_used}秒"
@@ -517,7 +519,7 @@ class CODESPACE:
                 student.codespace.status = "stopped"
                 await TABLE.write(student)
                 return "stopped"
-            
+
         except StudentNotFoundError:
             LOGGERR.error(f"找不到学生: {sid}")
             raise
@@ -549,7 +551,9 @@ class CODESPACE:
                 # 代码空间正在运行，返回URL
 
                 # 检查是否有存储的URL
-                if student.codespace.url.startswith("http://") or student.codespace.url.startswith("https://"):
+                if student.codespace.url.startswith(
+                    "http://"
+                ) or student.codespace.url.startswith("https://"):
                     return student.codespace.url
 
                 # 如果没有存储的URL，可能是集群状态不一致，尝试从集群获取
@@ -568,19 +572,21 @@ class CODESPACE:
                 except Exception as e:
                     LOGGERR.warning(f"获取代码空间作业信息失败: {sid}, 错误: {e}")
                     # 继续尝试其他方法获取URL
-                
+
                 # 最后一次尝试：重新从数据库获取学生信息，以防URL已更新
                 try:
                     updated_student = await TABLE.read(sid)
                     if updated_student.codespace.url:
-                        LOGGERR.info(f"从数据库获取到最新URL: {updated_student.codespace.url}")
+                        LOGGERR.info(
+                            f"从数据库获取到最新URL: {updated_student.codespace.url}"
+                        )
                         return updated_student.codespace.url
                 except Exception as e:
                     LOGGERR.warning(f"重新读取学生信息失败: {sid}, 错误: {e}")
-                
+
                 # 所有尝试都失败，返回False
                 return False
-                
+
             else:
                 # 未知状态，返回False
                 LOGGERR.warning(f"未知的代码空间状态: {sid}, status: {status}")
@@ -647,7 +653,8 @@ class CODESPACE:
             name=f"codespace-{sid}",
             image=CONFIG.CLUSTER.Codespace.IMAGE,
             ports=[
-                cluster.PortParams.from_config(port) for port in CONFIG.CLUSTER.Codespace.PORT
+                cluster.PortParams.from_config(port)
+                for port in CONFIG.CLUSTER.Codespace.PORT
             ],
             env={
                 "PASSWORD": api_key_enc(sid),
@@ -676,12 +683,12 @@ class CODESPACE:
                 return
 
             now = datetime.now().timestamp()
-            
+
             # 检查是否超出时间配额
             if student.codespace.time_quota > 0:
-                if student.codespace.last_watch == 0:
-                    student.codespace.last_watch = student.codespace.last_active
-                current_usage = now - student.codespace.last_watch
+                current_usage = now - max(
+                    student.codespace.last_start, student.codespace.last_watch
+                )
                 student.codespace.last_watch = now
                 student.codespace.time_used += current_usage
                 await TABLE.write(student)
@@ -693,7 +700,6 @@ class CODESPACE:
             LOGGERR.warning(f"监控期间找不到学生 {sid}，跳过。")
         except Exception as e:
             LOGGERR.error(f"监控学生 {sid} 时发生未知错误: {e}")
-
 
     @classmethod
     async def watch_all(cls) -> None:

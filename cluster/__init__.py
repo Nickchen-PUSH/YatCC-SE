@@ -25,16 +25,16 @@ class PortParams(BaseModel):
     name: Optional[str] = Field(None, description="端口名称")
     protocol: str = Field(default="TCP", description="协议类型，默认为 TCP")
     node_port: Optional[int] = Field(None, description="节点端口（用于 NodePort 服务）")
-    
+
     @staticmethod
-    def from_config(config: Dict[str, Any]) -> 'PortParams':
+    def from_config(config: Dict[str, Any]) -> "PortParams":
         """从配置字典创建 PortParams 实例"""
         return PortParams(
             port=config.get("port"),
             target_port=config.get("targetPort"),
             name=config.get("name"),
             protocol=config.get("protocol", "TCP"),
-            node_port=config.get("nodePort")
+            node_port=config.get("nodePort"),
         )
 
 
@@ -80,12 +80,15 @@ class JobInfo(BaseModel):
         SUSPENDED = 3
         STARTING = 4
 
+
 def _read_port_config() -> List[PortParams]:
     """读取端口配置"""
     ports = []
     for port in CONFIG.CLUSTER.Codespace.PORTS:
         ports.append(PortParams(**port))
     return ports
+
+
 class ClusterABC(ABC):
     """集群接口基类"""
 
