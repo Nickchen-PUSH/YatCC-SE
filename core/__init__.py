@@ -51,10 +51,13 @@ async def ready() -> bool:
     except redis.RedisError:
         return False
 
+
 # ==================================================================================== #
+
 
 class Error(Exception):
     pass
+
 
 class OversizeError(Error):
 

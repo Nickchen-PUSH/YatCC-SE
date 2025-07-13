@@ -82,9 +82,6 @@ WSGI.register_error_handler(core.student.StudentNotFoundError, _handle_403)
 WSGI.register_error_handler(Exception, _handle_exception)
 
 
-
-
-
 # ==================================================================================== #
 _TAG_LOGIN = Tag(name="login", description="登录认证")
 
@@ -102,16 +99,20 @@ async def check_api_key() -> str:
     if api_key:
         account = api_key_dec(api_key)
         if not account:
-            raise ErrorResponse(Response(
-                "API-KEY无效",
-                status=403,
-            ))
-        user=await core.student.TABLE.get_user_info(account)
+            raise ErrorResponse(
+                Response(
+                    "API-KEY无效",
+                    status=403,
+                )
+            )
+        user = await core.student.TABLE.get_user_info(account)
         if not user.name and not user.mail:
-            raise ErrorResponse(Response(
-                "User not Found",
-                status=403,
-            ))
+            raise ErrorResponse(
+                Response(
+                    "User not Found",
+                    status=403,
+                )
+            )
         g.current_account = account
         return account
     raise ErrorResponse(
@@ -181,7 +182,7 @@ _TAG_USER = Tag(name="user", description="用户设置")
 )
 async def user_info():
     """获取用户信息"""
-    account =await check_api_key()
+    account = await check_api_key()
     user = await core.student.TABLE.get_user_info(account)
     return user.model_dump()
 
@@ -233,8 +234,6 @@ async def user_reset_password(body: UserResetPassword):
         raise ErrorResponse(Response(str(e), status=403))
 
 
-
-
 # ==================================================================================== #
 _TAG_CODESPACE = Tag(name="codespace", description="代码空间")
 
@@ -252,17 +251,16 @@ _TAG_CODESPACE = Tag(name="codespace", description="代码空间")
 )
 async def codespace():
     """进入代码空间（重定向）"""
-    account=await check_api_key()
-    space_status=await core.student.CODESPACE.get_status(account)
-    url=await core.student.CODESPACE.get_url(account)
+    account = await check_api_key()
+    space_status = await core.student.CODESPACE.get_status(account)
+    url = await core.student.CODESPACE.get_url(account)
 
-    if space_status=="running" and url:
-        return redirect(url,code=302)
-    elif space_status=="running" and not url:
-        return redirect("/codespace",code=307)
+    if space_status == "running" and url:
+        return redirect(url, code=302)
+    elif space_status == "running" and not url:
+        return redirect("/codespace", code=307)
     else:
-        return redirect("/codespace",code=303)
-
+        return redirect("/codespace", code=303)
 
 
 @WSGI.post(
@@ -279,8 +277,8 @@ async def codespace():
 async def codespace_start():
     """启动代码空间，立即返回，不会等待代码空间启动完成"""
     account = await check_api_key()
-    status=await core.student.CODESPACE.get_status(account)
-    if status=="running":
+    status = await core.student.CODESPACE.get_status(account)
+    if status == "running":
         return Response("代码空间已启动", status=202)
     try:
         await core.student.CODESPACE.start(account)
@@ -307,8 +305,8 @@ async def codespace_start():
 async def codespace_stop():
     """停止代码空间，立即返回，不会等待代码空间停止完成"""
     account = await check_api_key()
-    status=await core.student.CODESPACE.get_status(account)
-    if(status=="stopped"):
+    status = await core.student.CODESPACE.get_status(account)
+    if status == "stopped":
         return Response("代码空间未启动", status=202)
     try:
         await core.student.CODESPACE.stop(account)
@@ -356,7 +354,7 @@ async def codespace_info():
         student = await core.student.TABLE.read(account)
         status = await core.student.CODESPACE.get_status(account)
         url = await core.student.CODESPACE.get_url(account)
-        
+
         return {
             "access_url": url if status == "running" else False,
             "last_start": student.codespace.last_start,
@@ -364,23 +362,24 @@ async def codespace_info():
             "time_quota": student.codespace.time_quota,
             "time_used": student.codespace.time_used,
             "space_quota": 0,  # 目前没有空间配额信息
-            "space_used": 0    # 目前没有空间使用信息
+            "space_used": 0,  # 目前没有空间使用信息
         }, 200
     except Exception as e:
         LOGGER.error(f"获取代码空间信息失败: {account}, 错误: {e}")
         raise ErrorResponse(Response("获取代码空间信息失败", status=500))
 
 
-
 # ==================================================================================== #
 @WSGI.route("/")
-@WSGI.route('/<path:path>')
+@WSGI.route("/<path:path>")
 def index(path=None):
     return redirect("/static/index.html")
+
 
 def wsgi():
     import base.logger as logger
     from core import ainit
+
     logger.setup_logger(
         log_dir=CONFIG.log_dir,
         index_name="svc_stu",

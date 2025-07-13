@@ -134,7 +134,7 @@ class KubernetesSpec:
 
     def _build_resources(self) -> Dict[str, Dict[str, str]]:
         return {
-            "requests": {"memory": "2048Mi", "cpu": "1000m"},
+            "requests": {"memory": "1024Mi", "cpu": "500m"},
             "limits": {
                 "memory": self.job_params.memory_limit
                 or CONFIG.CLUSTER.Codespace.DEFAULT_MEMORY_LIMIT,

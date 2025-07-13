@@ -6,8 +6,8 @@ from base import PROJECT_DIR, Configuration
 
 
 class Environ(Configuration):
-    mock_cluster = False
-    
+    mock_cluster = True
+
     deployment_mode = "local"
     """部署模式，可选值为 local, minikube, aliyun"""
 
@@ -148,8 +148,8 @@ class ClusterConfig(Configuration):
 
         IMAGE = "crpi-p0o30thhhjjucg78.cn-guangzhou.personal.cr.aliyuncs.com/nickchen-aliyun/codespace.ci:latest"
         DEFAULT_PASSWORD = "student123"
-        DEFAULT_CPU_LIMIT = "2000m"
-        DEFAULT_MEMORY_LIMIT = "4Gi"
+        DEFAULT_CPU_LIMIT = "500m"
+        DEFAULT_MEMORY_LIMIT = "1Gi"
         DEFAULT_STORAGE_SIZE = "5Gi"
         PORT = [
             {

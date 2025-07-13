@@ -5,7 +5,6 @@ from . import OversizeError
 LOGGER = logger(__spec__, __file__)
 
 
-
 class API_KEY:
 
     @classmethod
