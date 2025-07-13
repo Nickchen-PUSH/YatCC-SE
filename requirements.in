@@ -1,0 +1,15 @@
+# Framework
+flask
+flask-cors
+
+# Kubernetes client
+kubernetes
+
+# Database
+redis
+
+# Configuration
+pyyaml
+
+# WSGI Server for production
+gunicorn
