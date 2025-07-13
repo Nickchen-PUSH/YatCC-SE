@@ -605,10 +605,12 @@ async def update_student_codespace_quota(path: DetailPath, body: CodespaceQuota)
 
 # ==================================================================================== #
 
+
 @WSGI.route("/")
-@WSGI.route('/<path:path>')
+@WSGI.route("/<path:path>")
 def index(path=None):
     return redirect("/static/index.html")
+
 
 def wsgi():
     import base.logger as logger

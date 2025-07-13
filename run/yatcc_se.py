@@ -44,6 +44,7 @@ def dev(rm_io: bool) -> int:
             ps.wait()
     return ps.returncode
 
+
 async def build():
     from . import RUNNING_DIR
 
@@ -63,7 +64,7 @@ async def build():
                 r"svc_adm.py",
                 r"svc_stu.py",
                 r"util.py",
-                ],
+            ],
             excludes=[
                 r"__pycache__|.*/__pycache__",
             ],
@@ -100,6 +101,8 @@ async def build():
         )
 
     PROGRESS(f"==> {tag}")
+
+
 def run(
     sshd_port: int, svc_adm_port: int, svc_stu_port: int, io_dir: Path_t, *args: str
 ) -> int:
@@ -116,6 +119,6 @@ def run(
         ]
     ).returncode
 
-    
+
 if __name__ == "__main__":
     build()

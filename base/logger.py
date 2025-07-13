@@ -212,5 +212,3 @@ class Parser:
         :return: 过滤后的日志记录，或 None 表示丢弃
         """
         return rec
-
-

@@ -81,6 +81,7 @@ class Basic(unittest.TestCase):
 
     def setUp(self) -> None:
         from util import api_key_enc
+
         global WSGI
         self.client = WSGI.test_client()
         self.header = {"X-API-KEY": {api_key_enc("24111352")}}
@@ -111,7 +112,6 @@ class Basic(unittest.TestCase):
                 n_resp = self.client.patch(url, json=json)
                 w_resp = self.client.patch(url, json=json, headers=self.wrong_header)
 
-
         self.assertEqual(n_resp.status_code, 401)
         self.assertEqual(w_resp.status_code, 403)
 
@@ -125,7 +125,7 @@ class Basic(unittest.TestCase):
             },
         )
         self.assertEqual(resp.status_code, 200)
-        
+
         # 测试使用错误密码登录
         resp = self.client.post(
             "/login",
@@ -137,7 +137,7 @@ class Basic(unittest.TestCase):
         self.assertEqual(resp.status_code, 401)
 
     def test_uesr_info(self):
-        
+
         self._test_api_key("/user", None, "GET")
         # 测试含有apikey获取用户信息
         resp = self.client.get("/user", headers=self.header)
@@ -166,7 +166,7 @@ class Basic(unittest.TestCase):
         # 检测用户信息是否被更改
         resp = self.client.get("/user", headers=self.header)
         self.assertEqual(resp.status_code, 200)
-        
+
         updated_info = resp.json
         self.assertEqual(updated_info["name"], new_user_info["name"])
         self.assertEqual(updated_info["mail"], new_user_info["mail"])
@@ -175,15 +175,13 @@ class Basic(unittest.TestCase):
         resp = self.client.put(
             "/user",
             json={
-                    "name": "顾宇浩",
-                    "mail": "yhgu2000@outlook.com",
+                "name": "顾宇浩",
+                "mail": "yhgu2000@outlook.com",
             },
             headers=self.header,
         )
 
         self.assertEqual(resp.status_code, 200)
-
-        
 
     def test_reset_password(self):
 
@@ -259,7 +257,6 @@ class Basic(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 302)
 
-
     def test_start_codespace(self):
         self._test_api_key("/codespace", None, "POST")
 
@@ -284,7 +281,6 @@ class Basic(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 402)
 
-        
         async def ado():
             # 恢复旧数据
             await student.CODESPACE.stop("24111352")
@@ -308,7 +304,6 @@ class Basic(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200)
 
-        
         async def ado():
             # 恢复旧数据
             await student.CODESPACE.start("24111353")
