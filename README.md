@@ -106,8 +106,7 @@ YatCC-SE/
 ├── 📄 svc_adm.py         # 管理端 API 服务
 ├── 📄 svc_stu.py         # 学生端 API 服务
 ├── 📄 config.py          # 开发环境配置
-├── 📄 deployment.yaml    # Kubernetes 部署配置
-└── 📄 docker-compose.yml # Docker Compose 配置
+└──📄 deployment.yaml    # Kubernetes 部署配置
 ```
 
 ## 🏭 部署指南
